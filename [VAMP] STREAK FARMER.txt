@@ -71,7 +71,7 @@ function Vamp.Rituals.DimensionalWarp(jobId)
 if not Vamp.Grimoire.Trance.HasQueuedTeleport then
 local queuer = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport)
 if queuer then
-queuer([[loadstring(game:HttpGet("https://raw.githubusercontent.com/asahrei/VAMP/refs/heads/main/%5BVAMP%5D%20STREAK%20FARMER.txt", true))()]])
+queuer([[loadstring(game:HttpGet("https://raw.githubusercontent.com/asahrei/VAMP/refs/heads/main/%5BVAMP%5D%20STREAK%20FARMER.txt?nocache=" .. tick(), true))()]])
 end
 Vamp.Grimoire.Trance.HasQueuedTeleport=true
 end
