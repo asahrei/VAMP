@@ -111,7 +111,6 @@ end
 function Vamp.Rituals.Seppuku()
 end
 function Vamp.Rituals.Execute()
-if not Vamp.Grimoire.Desires.IsWinner then return end
 local tName = Vamp.Grimoire.Trance.TargetName
 if not tName then return end
 local target = Vamp.Minions.Players:FindFirstChild(tName)
@@ -126,16 +125,20 @@ if not getgenv().VampActive or not Vamp.Grimoire.Trance.InMatch then conn:Discon
 local tChar = target.Character
 local mChar = LP.Character
 if tChar and mChar and tChar:FindFirstChild("Humanoid") and tChar:FindFirstChild("HumanoidRootPart") and mChar:FindFirstChild("HumanoidRootPart") and mChar:FindFirstChild("Humanoid") then
+if Vamp.Grimoire.Desires.IsWinner then
 if tChar.Humanoid.Health <= 0 then conn:Disconnect() return end
-local tPos = tChar.HumanoidRootPart.CFrame
-local behindPos = tPos.Position - (tPos.LookVector * 1)
-mChar.HumanoidRootPart.CFrame = CFrame.new(behindPos, tPos.Position)
 local activeTool = mChar:FindFirstChildWhichIsA("Tool")
 if activeTool then
 activeTool:Activate()
 else
 local bpTool = LP.Backpack:FindFirstChildWhichIsA("Tool")
 if bpTool then mChar.Humanoid:EquipTool(bpTool) end
+end
+else
+if mChar.Humanoid.Health <= 0 then conn:Disconnect() return end
+local tPos = tChar.HumanoidRootPart.CFrame
+local frontPos = tPos.Position + (tPos.LookVector * 2)
+mChar.HumanoidRootPart.CFrame = CFrame.new(frontPos, tPos.Position)
 end
 end
 end)
@@ -442,7 +445,7 @@ if intrusionDetected and not Trance.IsLocked then
 local escapeSpot=FindBestSpot();if escapeSpot then Vamp.Rituals.Dissipate(false);Vamp.Rituals.ShadowStep(escapeSpot)else Vamp.Rituals.Dissipate(true);Trance.CurrentAltar=nil;Vamp.Visage.Refresh("SCANNING")end
 else
 local partnerPresent=current.Partner.Occupied.Bot;if not partnerPresent then local betterSpot=FindBestSpot();if betterSpot and betterSpot.Partner.Occupied.Bot then Vamp.Rituals.Dissipate(false);Vamp.Rituals.ShadowStep(betterSpot);return end end;if partnerPresent then
-if Vamp.Grimoire.Desires.IsWinner and current.Partner.Players.Bot then
+if current.Partner.Players.Bot then
 Vamp.Grimoire.Trance.TargetName = current.Partner.Players.Bot
 end
 Trance.LastLoadingTime=tick();Vamp.Visage.Refresh("LOADING")else if(tick()-Trance.LastLoadingTime>=0.5)then Vamp.Visage.Refresh("IDLE")end end end
