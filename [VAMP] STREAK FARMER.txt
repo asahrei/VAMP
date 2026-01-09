@@ -1,3 +1,5 @@
+local FileName="VampStreakFarmer.lua"
+local ScriptLogic=[==[
 if not game:IsLoaded() then game.Loaded:Wait() end
 local Players=game:GetService("Players")
 local LP=Players.LocalPlayer
@@ -69,9 +71,10 @@ if not Vamp.Grimoire.Desires.FarmedWins then Vamp.Grimoire.Desires.FarmedWins=0 
 end
 function Vamp.Rituals.DimensionalWarp(jobId)
 if not Vamp.Grimoire.Trance.HasQueuedTeleport then
-local queuer = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport)
-if queuer then
-queuer([[loadstring(game:HttpGet("https://raw.githubusercontent.com/asahrei/VAMP/refs/heads/main/%5BVAMP%5D%20STREAK%20FARMER.txt?nocache=" .. tick(), true))()]])
+if(queue_on_teleport)or(syn and syn.queue_on_teleport)then
+local queueFunc=queue_on_teleport or syn.queue_on_teleport
+local scriptPayload=string.format([[if not game:IsLoaded()then game.Loaded:Wait()end;task.wait(1);local filename="%s";if isfile(filename)then print("[VAMP] Auto-Executing: "..filename);loadstring(readfile(filename))()else warn("[VAMP] File not found.")end]],Vamp.Grimoire.Law.FileName)
+queueFunc(scriptPayload)
 end
 Vamp.Grimoire.Trance.HasQueuedTeleport=true
 end
@@ -457,3 +460,6 @@ Vamp.Prophecy.MonitorShutdownKick()
 Vamp.Prophecy.EternalCycle()
 if LP.Character then task.spawn(function()Vamp.Rituals.InitializeAnchor()end)end
 Vamp.Visage.Notify("[VAMP]","Streak Farmer Loaded.")
+]==]
+writefile(FileName,ScriptLogic)
+loadstring(ScriptLogic)()
