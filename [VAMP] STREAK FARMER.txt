@@ -4,6 +4,7 @@ if not game:IsLoaded() then game.Loaded:Wait() end
 local Players=game:GetService("Players")
 local LP=Players.LocalPlayer
 if not LP.Character then LP.CharacterAdded:Wait() end
+-- [ADDED] LoadingStartTime to Trance to track duration correctly
 local Vamp={Minions={},Bloodline={},Grimoire={},Rituals={},Visage={Elements={},State={IsNotifying=false,CurrentHoveredTopBtn=nil}},Prophecy={}}
 Vamp.Minions={Players=game:GetService("Players"),CoreGui=game:GetService("CoreGui"),RunService=game:GetService("RunService"),ReplicatedStorage=game:GetService("ReplicatedStorage"),HttpService=game:GetService("HttpService"),TeleportService=game:GetService("TeleportService"),TweenService=game:GetService("TweenService"),UserInputService=game:GetService("UserInputService"),VirtualUser=game:GetService("VirtualUser"),Stats=game:GetService("Stats"),GuiService=game:GetService("GuiService")}
 Vamp.Bloodline={
@@ -15,13 +16,25 @@ GREY_BASE=Color3.fromRGB(100,100,105), GREY_DARK=Color3.fromRGB(40,40,45),
 ORANGE_BASE=Color3.fromRGB(200,100,20), ORANGE_DARK=Color3.fromRGB(80,30,0),
 BG=Color3.fromRGB(8,8,10), TXT=Color3.fromRGB(240,240,240), DIM=Color3.fromRGB(120,120,120), SNOW=Color3.fromRGB(200,200,210)
 }
-Vamp.Grimoire={Law={FileName="VampStreakFarmer.lua",SaveFile="VampFarm_"..LP.Name..".json",ScanningPos=nil,VotingPos=Vector3.new(150,-508,-888),SeatInitPos=Vector3.new(0,5000,0),QueueY=-124,SeatY=-130.75,SpotRadiusSq=16,TopYThreshold=-116,BotYThreshold=-117,LobbyY=-118,LobbyLeaveTolerance=20,LobbyReturnProximity=60,ReturnTimeout=40,TeleportHoverTime=0.1,WatchdogRadius=30,AuraColors={}},Desires={Active=false,IsWinner=true,FarmedWins=0},Trance={CurrentAltar=nil,InMatch=false,InVoting=false,LastStatus="",LastLoadingTime=0,MatchRemoteActive=false,HasQueuedTeleport=false,TargetName=nil,PartnerLockStartTime=0,IsLocked=false},Altars={{X=31.8,Z=15.7,Index=1},{X=37.45,Z=15.7,Index=2},{X=31.8,Z=57.0,Index=3},{X=37.45,Z=57.0,Index=4}}}
+-- [MODIFIED] Added LoadingStartTime to Trance
+Vamp.Grimoire={Law={FileName="VampStreakFarmer.lua",SaveFile="VampFarm_"..LP.Name..".json",ScanningPos=nil,VotingPos=Vector3.new(150,-508,-888),SeatInitPos=Vector3.new(0,5000,0),QueueY=-124,SeatY=-130.75,SpotRadiusSq1v1=16,SpotRadiusSq2v2=22.4,TopYThreshold=-116,BotYThreshold=-117,LobbyY=-118,LobbyCenter=Vector3.new(-45,-118,38),LobbyLeaveTolerance=20,LobbyReturnProximity=60,ReturnTimeout=40,TeleportHoverTime=0.1,WatchdogRadius=30,AuraColors={}},Desires={Active=false,IsWinner=true,FarmedWins=0,Mode="1V1",Priority="STANDARD"},Trance={CurrentAltar=nil,InMatch=false,InVoting=false,LastStatus="",LoadingStartTime=0,MatchRemoteActive=false,HasQueuedTeleport=false,TargetNames={},PartnerLockStartTime=0,IsLocked=false},Altars={}}
 Vamp.Grimoire.Law.AuraColors={OFF="RED",SCANNING="GREEN",IDLE="BLUE",LOADING="PURPLE",PLAYING="PURPLE",COOLDOWN="GREY",CHOOSING_MAP="ORANGE",REJOINING="PURPLE"}
+local Altars1v1={{X=31.8,Z=15.7,Index=1},{X=37.45,Z=15.7,Index=2},{X=31.8,Z=57.0,Index=3},{X=37.45,Z=57.0,Index=4}}
+local Altars2v2={{X=46.0,Z=16.2,Index=1},{X=52.54,Z=16.2,Index=2},{X=46.0,Z=57.3,Index=3},{X=52.54,Z=57.3,Index=4}}
+function Vamp.Grimoire.SetupAltars()
+local mode = Vamp.Grimoire.Desires.Mode
+local source = (mode == "2V2") and Altars2v2 or Altars1v1
+Vamp.Grimoire.Altars = {}
+for i=1,4 do
+Vamp.Grimoire.Altars[i] = {X=source[i].X, Z=source[i].Z, Index=source[i].Index}
+Vamp.Grimoire.Altars[i].Occupied={Top=0,Bot=0}
+Vamp.Grimoire.Altars[i].Players={Top={},Bot={}}
+end
 for i=1,4 do
 Vamp.Grimoire.Altars[i].Partner=Vamp.Grimoire.Altars[i%2==1 and i+1 or i-1]
-Vamp.Grimoire.Altars[i].Occupied={Top=false,Bot=false}
-Vamp.Grimoire.Altars[i].Players={Top=nil,Bot=nil}
 end
+end
+Vamp.Grimoire.SetupAltars()
 function Vamp.Visage.GetTheme(colorKey)
 if colorKey=="RED" then return Vamp.Bloodline.RED_BASE, Vamp.Bloodline.RED_DARK
 elseif colorKey=="GREEN" then return Vamp.Bloodline.GREEN_BASE, Vamp.Bloodline.GREEN_DARK
@@ -60,14 +73,25 @@ ButtonObj:UpdateState()
 return btn
 end
 function Vamp.Rituals.InitializeAnchor()
-local char,hrp,hum
-repeat char=LP.Character;hrp=char and char:FindFirstChild("HumanoidRootPart");hum=char and char:FindFirstChild("Humanoid");if not(hrp and hum and hum.FloorMaterial~=Enum.Material.Air)then task.wait()end until hrp and hum and hum.FloorMaterial~=Enum.Material.Air
-Vamp.Grimoire.Law.ScanningPos=hrp.Position
+local law = Vamp.Grimoire.Law
+local char = LP.Character
+local hrp = char and char:FindFirstChild("HumanoidRootPart")
+local determinedPos = law.LobbyCenter
+if hrp then
+local dist = (hrp.Position - law.LobbyCenter).Magnitude
+if dist <= law.LobbyReturnProximity then
+determinedPos = hrp.Position
+end
+end
+law.ScanningPos = determinedPos
 end
 function Vamp.Rituals.ScribeDesires() writefile(Vamp.Grimoire.Law.SaveFile,Vamp.Minions.HttpService:JSONEncode(Vamp.Grimoire.Desires)) end
 function Vamp.Rituals.RecallDesires()
 if isfile(Vamp.Grimoire.Law.SaveFile)then pcall(function()local decoded=Vamp.Minions.HttpService:JSONDecode(readfile(Vamp.Grimoire.Law.SaveFile));for k,v in pairs(decoded)do Vamp.Grimoire.Desires[k]=v end end)end
 if not Vamp.Grimoire.Desires.FarmedWins then Vamp.Grimoire.Desires.FarmedWins=0 end
+if not Vamp.Grimoire.Desires.Mode then Vamp.Grimoire.Desires.Mode="1V1" end
+if not Vamp.Grimoire.Desires.Priority then Vamp.Grimoire.Desires.Priority="STANDARD" end
+Vamp.Grimoire.SetupAltars()
 end
 function Vamp.Rituals.DimensionalWarp(jobId)
 if not Vamp.Grimoire.Trance.HasQueuedTeleport then
@@ -111,10 +135,14 @@ end
 function Vamp.Rituals.Seppuku()
 end
 function Vamp.Rituals.Execute()
-local tName = Vamp.Grimoire.Trance.TargetName
-if not tName then return end
-local target = Vamp.Minions.Players:FindFirstChild(tName)
-if not target then return end
+local targets = Vamp.Grimoire.Trance.TargetNames
+if not targets or #targets == 0 then return end
+local targetObjs = {}
+for _, tName in ipairs(targets) do
+local t = Vamp.Minions.Players:FindFirstChild(tName)
+if t then table.insert(targetObjs, t) end
+end
+if #targetObjs == 0 then return end
 local tool = LP.Backpack:FindFirstChildWhichIsA("Tool")
 local hum = LP.Character and LP.Character:FindFirstChild("Humanoid")
 if hum and tool then hum:EquipTool(tool) end
@@ -122,10 +150,13 @@ local rs = Vamp.Minions.RunService
 local conn
 conn = rs.RenderStepped:Connect(function()
 if not getgenv().VampActive or not Vamp.Grimoire.Trance.InMatch then conn:Disconnect() return end
-local tChar = target.Character
 local mChar = LP.Character
-if tChar and mChar and tChar:FindFirstChild("Humanoid") and tChar:FindFirstChild("HumanoidRootPart") and mChar:FindFirstChild("HumanoidRootPart") and mChar:FindFirstChild("Humanoid") then
+if not mChar or not mChar:FindFirstChild("Humanoid") or not mChar:FindFirstChild("HumanoidRootPart") then return end
 if Vamp.Grimoire.Desires.IsWinner then
+if Vamp.Grimoire.Desires.Mode == "2V2" and Vamp.Grimoire.Desires.Priority == "STANDARD" then
+elseif Vamp.Grimoire.Desires.Mode == "1V1" then
+local tChar = targetObjs[1].Character
+if not tChar or not tChar:FindFirstChild("Humanoid") then return end
 if tChar.Humanoid.Health <= 0 then conn:Disconnect() return end
 local activeTool = mChar:FindFirstChildWhichIsA("Tool")
 if activeTool then
@@ -135,8 +166,27 @@ local bpTool = LP.Backpack:FindFirstChildWhichIsA("Tool")
 if bpTool then mChar.Humanoid:EquipTool(bpTool) end
 end
 else
+local anyAlive = false
+for _, t in ipairs(targetObjs) do
+if t and t.Character and t.Character:FindFirstChild("Humanoid") and t.Character.Humanoid.Health > 0 then
+anyAlive = true
+break
+end
+end
+if not anyAlive then conn:Disconnect() return end
+local activeTool = mChar:FindFirstChildWhichIsA("Tool")
+if activeTool then
+activeTool:Activate()
+else
+local bpTool = LP.Backpack:FindFirstChildWhichIsA("Tool")
+if bpTool then mChar.Humanoid:EquipTool(bpTool) end
+end
+end
+else
 if mChar.Humanoid.Health <= 0 then conn:Disconnect() return end
-local tPos = tChar.HumanoidRootPart.CFrame
+local primeTarget = targetObjs[1]
+if primeTarget and primeTarget.Character and primeTarget.Character:FindFirstChild("HumanoidRootPart") then
+local tPos = primeTarget.Character.HumanoidRootPart.CFrame
 local frontPos = tPos.Position + (tPos.LookVector * 2)
 mChar.HumanoidRootPart.CFrame = CFrame.new(frontPos, tPos.Position)
 end
@@ -144,7 +194,7 @@ end
 end)
 end
 function Vamp.Rituals.AwaitReturn()
-local waitStart=tick();local lastPos=Vamp.Grimoire.Law.ScanningPos or Vector3.new(-45,-118,38)
+local waitStart=tick();local lastPos=Vamp.Grimoire.Law.ScanningPos or Vamp.Grimoire.Law.LobbyCenter
 while getgenv().VampActive do
 if tick()-waitStart>Vamp.Grimoire.Law.ReturnTimeout then Vamp.Rituals.Dissipate(true);break end
 local char=LP.Character;local hrp=char and char:FindFirstChild("HumanoidRootPart");local hum=char and char:FindFirstChild("Humanoid")
@@ -152,7 +202,9 @@ if hrp and hum then local pos=hrp.Position;if(pos-lastPos).Magnitude<=Vamp.Grimo
 end
 end
 function Vamp.Rituals.Dissipate(retreatToAnchor)
-if LP.Character and LP.Character:FindFirstChild("Humanoid")then LP.Character.Humanoid.Sit=false end
+if LP.Character and LP.Character:FindFirstChild("Humanoid") then
+if LP.Character.Humanoid.Sit then LP.Character.Humanoid.Sit=false end
+end
 if workspace:FindFirstChild("invischair")then workspace.invischair:Destroy()end
 if retreatToAnchor and Vamp.Grimoire.Law.ScanningPos and LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")then
 local hrp=LP.Character.HumanoidRootPart;hrp.AssemblyLinearVelocity=Vector3.zero;hrp.CFrame=CFrame.new(Vamp.Grimoire.Law.ScanningPos)
@@ -325,10 +377,78 @@ return Value
 end
 Vamp.Visage.Elements.UptimeLabel=CreateStat("UPTIME",0);Vamp.Visage.Elements.FPSLabel=CreateStat("FPS",22);Vamp.Visage.Elements.PingLabel=CreateStat("PING",44);Vamp.Visage.Elements.RoleStatLabel=CreateStat("ROLE",66);Vamp.Visage.Elements.PosLabel=CreateStat("POSITION",88);Vamp.Visage.Elements.FarmedWinsLabel=CreateStat("FARMED WINS",110)
 local ControlsFrame=Instance.new("Frame",MainFrame);ControlsFrame.BackgroundTransparency=1;ControlsFrame.Position=UDim2.new(0,15,0,195);ControlsFrame.Size=UDim2.new(1,-30,0,100);ControlsFrame.ZIndex=2
-Vamp.Visage.ButtonFactory.Create(ControlsFrame,{Name="PowerBtn",Position=UDim2.new(0,0,0,0),Size=UDim2.new(0.48,0,0,40),StateMapper=function()return Vamp.Grimoire.Desires.Active and"ON"or"OFF",Vamp.Grimoire.Desires.Active and "GREEN" or "RED" end,OnClick=function()Vamp.Grimoire.Desires.Active=not Vamp.Grimoire.Desires.Active;Vamp.Rituals.ScribeDesires();if Vamp.Grimoire.Desires.Active then Vamp.Rituals.InitializeAnchor();Vamp.Rituals.Dissipate(true)else Vamp.Grimoire.Trance.CurrentAltar=nil;Vamp.Rituals.Dissipate(not Vamp.Grimoire.Trance.InMatch)end;Vamp.Visage.Refresh()end})
-Vamp.Visage.ButtonFactory.Create(ControlsFrame,{Name="RoleBtn",Position=UDim2.new(0.52,0,0,0),Size=UDim2.new(0.48,0,0,40),StateMapper=function()return Vamp.Grimoire.Desires.IsWinner and"WINNER"or"LOSER",Vamp.Grimoire.Desires.IsWinner and "BLUE" or "RED" end,OnClick=function()local s=Vamp.Grimoire.Trance.LastStatus;if not Vamp.Grimoire.Trance.InMatch and s~="LOADING" and s~="CHOOSING MAP" then Vamp.Grimoire.Desires.IsWinner=not Vamp.Grimoire.Desires.IsWinner;Vamp.Rituals.ScribeDesires();Vamp.Visage.Refresh()end end})
-Vamp.Visage.ButtonFactory.Create(ControlsFrame,{Name="RejoinBtn",Position=UDim2.new(0,0,0.55,0),Size=UDim2.new(0.48,0,0,40),Text="REJOIN",ColorKey="PURPLE",OnClick=function()task.spawn(Vamp.Rituals.Ascend)end})
-Vamp.Visage.ButtonFactory.Create(ControlsFrame,{Name="SuicideBtn",Position=UDim2.new(0.52,0,0.55,0),Size=UDim2.new(0.48,0,0,40),Text="SUICIDE",ColorKey="RED",OnClick=function()if LP.Character and LP.Character:FindFirstChild("Humanoid")then LP.Character.Humanoid.Health=0 end end})
+Vamp.Visage.ButtonFactory.Create(ControlsFrame,{Name="PowerBtn",Position=UDim2.new(0,0,0,0),Size=UDim2.new(0.48,0,0,40),StateMapper=function()return Vamp.Grimoire.Desires.Active and"ON"or"OFF",Vamp.Grimoire.Desires.Active and "GREEN" or "RED" end,OnClick=function()
+-- [MODIFIED] Power Button Logic
+-- 1. Check if In Match
+if Vamp.Grimoire.Trance.InMatch then
+Vamp.Visage.Notify("[VAMP]", "Wait Until The Match Finishes.")
+return
+end
+-- 2. Check if Choosing Map (Voting)
+if Vamp.Grimoire.Trance.InVoting then
+Vamp.Visage.Notify("[VAMP]", "Just Choose Your Map.")
+return
+end
+-- 3. Check Loading Duration (using new LoadingStartTime)
+if Vamp.Grimoire.Desires.Active then
+if Vamp.Grimoire.Trance.LoadingStartTime ~= 0 and (tick() - Vamp.Grimoire.Trance.LoadingStartTime >= 0.5) then
+Vamp.Visage.Notify("[VAMP]", "You Are Already Loading.")
+return
+end
+end
+Vamp.Grimoire.Desires.Active=not Vamp.Grimoire.Desires.Active;
+Vamp.Rituals.ScribeDesires();
+if Vamp.Grimoire.Desires.Active then
+Vamp.Rituals.Dissipate(false)
+else
+-- 4. Check status to see if we should teleport back (Only if IDLE)
+local currentStatus = Vamp.Grimoire.Trance.LastStatus
+local shouldTeleport = (currentStatus == "IDLE")
+Vamp.Grimoire.Trance.CurrentAltar=nil;
+Vamp.Grimoire.Trance.LoadingStartTime=0 -- Reset timer
+Vamp.Rituals.Dissipate(shouldTeleport)
+end;
+Vamp.Visage.Refresh()
+end})
+Vamp.Visage.ButtonFactory.Create(ControlsFrame,{Name="RoleBtn",Position=UDim2.new(0.52,0,0,0),Size=UDim2.new(0.48,0,0,40),StateMapper=function()return Vamp.Grimoire.Desires.IsWinner and"WINNER"or"LOSER",Vamp.Grimoire.Desires.IsWinner and "BLUE" or "RED" end,OnClick=function()
+local s=Vamp.Grimoire.Trance.LastStatus;
+if not Vamp.Grimoire.Trance.InMatch and s~="LOADING" and s~="CHOOSING MAP" then
+Vamp.Grimoire.Desires.IsWinner=not Vamp.Grimoire.Desires.IsWinner;
+Vamp.Rituals.ScribeDesires();
+Vamp.Grimoire.Trance.CurrentAltar=nil
+Vamp.Rituals.Dissipate(false)
+Vamp.Visage.Refresh()
+end
+end})
+Vamp.Visage.ButtonFactory.Create(ControlsFrame,{Name="PrioBtn",Position=UDim2.new(0,0,0.55,0),Size=UDim2.new(0.48,0,0,40),StateMapper=function()return Vamp.Grimoire.Desires.Priority,Vamp.Grimoire.Desires.Priority=="PRIORITY" and "PURPLE" or "GREY" end,OnClick=function()
+if Vamp.Grimoire.Desires.Mode ~= "2V2" then
+Vamp.Visage.Notify("[VAMP]", "Enable 2V2 Mode To Use This.")
+return
+end
+if not Vamp.Grimoire.Desires.IsWinner then
+Vamp.Visage.Notify("[VAMP]", "Switch To The WINNER Role To Use This.")
+return
+end
+if Vamp.Grimoire.Trance.InMatch then
+Vamp.Visage.Notify("[VAMP]", "Wait Until The Match Is Over.")
+return
+end
+if Vamp.Grimoire.Desires.Priority == "STANDARD" then Vamp.Grimoire.Desires.Priority="PRIORITY" else Vamp.Grimoire.Desires.Priority="STANDARD" end
+Vamp.Rituals.ScribeDesires()
+Vamp.Grimoire.Trance.CurrentAltar=nil
+Vamp.Rituals.Dissipate(false)
+end})
+Vamp.Visage.ButtonFactory.Create(ControlsFrame,{Name="ModeBtn",Position=UDim2.new(0.52,0,0.55,0),Size=UDim2.new(0.48,0,0,40),StateMapper=function()return Vamp.Grimoire.Desires.Mode,Vamp.Grimoire.Desires.Mode=="2V2" and "PURPLE" or "RED" end,OnClick=function()
+if Vamp.Grimoire.Trance.InMatch then
+Vamp.Visage.Notify("[VAMP]", "Wait Until The Match Is Over.")
+return
+end
+if Vamp.Grimoire.Desires.Mode == "1V1" then Vamp.Grimoire.Desires.Mode="2V2" else Vamp.Grimoire.Desires.Mode="1V1" end
+Vamp.Grimoire.SetupAltars()
+Vamp.Rituals.ScribeDesires()
+Vamp.Grimoire.Trance.CurrentAltar=nil
+Vamp.Rituals.Dissipate(false)
+end})
 local StatusContainer=Instance.new("Frame",MainFrame);StatusContainer.BackgroundColor3=Color3.fromRGB(8,8,10);StatusContainer.Position=UDim2.new(0,15,1,-40);StatusContainer.Size=UDim2.new(1,-30,0,26);StatusContainer.ZIndex=2
 local StatusCorner=Instance.new("UICorner",StatusContainer);StatusCorner.CornerRadius=UDim.new(0,4);local StatusStroke=Instance.new("UIStroke",StatusContainer);StatusStroke.Color=Color3.new(1,1,1);StatusStroke.Thickness=1;local StatusGrad=Instance.new("UIGradient",StatusStroke);StatusGrad.Rotation=90;local cBase,cDark=Vamp.Visage.GetTheme("RED");StatusGrad.Color=ColorSequence.new{ColorSequenceKeypoint.new(0,cDark),ColorSequenceKeypoint.new(1,cBase)};Vamp.Visage.Elements.StatusGrad=StatusGrad
 local StatusDot=Instance.new("Frame",StatusContainer);StatusDot.Position=UDim2.new(0,10,0.5,-3);StatusDot.Size=UDim2.new(0,6,0,6);StatusDot.BackgroundColor3=Color3.new(1,1,1);StatusDot.ZIndex=2;Vamp.Visage.Elements.StatusDot=StatusDot;local DotGrad=Instance.new("UIGradient",StatusDot);DotGrad.Rotation=90;Vamp.Visage.Elements.DotGrad=DotGrad
@@ -409,50 +529,143 @@ Vamp.Minions.RunService.PreRender:Connect(function()
 if not getgenv().VampActive or not Vamp.Grimoire.Desires.Active or Vamp.Grimoire.Trance.InMatch or Vamp.Grimoire.Trance.InVoting then return end
 local Law=Vamp.Grimoire.Law;local Trance=Vamp.Grimoire.Trance;local Altars=Vamp.Grimoire.Altars;if not Law.ScanningPos then return end
 local currentAltar=Trance.CurrentAltar;local scanPos=Law.ScanningPos;local char=LP.Character;local hrp=char and char:FindFirstChild("HumanoidRootPart")
-if currentAltar and scanPos and hrp and not Trance.InMatch then local dist=(hrp.Position-scanPos).Magnitude;if dist<Law.WatchdogRadius then Vamp.Rituals.ShadowStep(currentAltar);return end end
-if Trance.LastStatus=="COOLDOWN"then return end
-for _,spot in ipairs(Altars)do
-spot.Occupied.Top=false;spot.Occupied.Bot=false
-spot.Players.Top=nil;spot.Players.Bot=nil
+if Trance.LastStatus~="COOLDOWN" then
+for _,spot in ipairs(Altars) do
+spot.Occupied.Top=0;spot.Occupied.Bot=0
+spot.Players.Top={};spot.Players.Bot={}
 end
+local radSq = (Vamp.Grimoire.Desires.Mode == "2V2") and Law.SpotRadiusSq2v2 or Law.SpotRadiusSq1v1
 for _,player in ipairs(Vamp.Minions.Players:GetPlayers())do
 local pHrp=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-if pHrp then local pos=pHrp.Position;for _,spot in ipairs(Altars)do if (pos.X-spot.X)^2+(pos.Z-spot.Z)^2<=Law.SpotRadiusSq then
+if pHrp then local pos=pHrp.Position;for _,spot in ipairs(Altars)do if (pos.X-spot.X)^2+(pos.Z-spot.Z)^2<=radSq then
 if pos.Y>Law.TopYThreshold then
-spot.Occupied.Top=true
-spot.Players.Top=player.Name
+spot.Occupied.Top=spot.Occupied.Top+1
+table.insert(spot.Players.Top, player.Name)
 elseif pos.Y<Law.BotYThreshold then
-spot.Occupied.Bot=true
-spot.Players.Bot=player.Name
+spot.Occupied.Bot=spot.Occupied.Bot+1
+table.insert(spot.Players.Bot, player.Name)
 end end end end end
 local function FindBestSpot()
-local allowed=Vamp.Grimoire.Desires.IsWinner and{1,3}or{2,4};local bestEmpty=nil;local bestPartnered=nil
-for _,idx in allowed do local spot=Altars[idx];if spot~=Trance.CurrentAltar and not spot.Occupied.Top and not spot.Occupied.Bot and not spot.Partner.Occupied.Top then if spot.Partner.Occupied.Bot then bestPartnered=spot;break else if not bestEmpty then bestEmpty=spot end end end end
-return bestPartnered or bestEmpty
+local allowed=Vamp.Grimoire.Desires.IsWinner and{1,3}or{2,4};local bestSpot=nil
+for _,idx in allowed do
+local spot=Altars[idx]
+if spot==Trance.CurrentAltar then continue end
+if Vamp.Grimoire.Desires.Mode == "2V2" then
+if spot.Occupied.Top > 0 then continue end
+if spot.Occupied.Bot >= 2 then continue end
+if Vamp.Grimoire.Desires.IsWinner then
+if Vamp.Grimoire.Desires.Priority == "PRIORITY" then
+if spot.Occupied.Bot == 0 then if not bestSpot then bestSpot = spot end end
+else
+if spot.Occupied.Bot >= 1 and spot.Partner.Occupied.Bot >= 2 then
+bestSpot = spot; break
+end
+end
+else
+if spot.Occupied.Bot >= 1 then
+bestSpot = spot; break
+elseif spot.Occupied.Bot == 0 and not bestSpot then
+bestSpot = spot
+end
+end
+else
+local topOcc = spot.Occupied.Top > 0
+local botOcc = spot.Occupied.Bot > 0
+local pTopOcc = spot.Partner.Occupied.Top > 0
+local pBotOcc = spot.Partner.Occupied.Bot > 0
+if not topOcc and not botOcc and not pTopOcc then
+if pBotOcc then bestSpot=spot;break else if not bestSpot then bestSpot=spot end end
+end
+end
+end
+return bestSpot
+end
+local function CheckLoadingCondition(spot)
+if not spot then return false end
+if Vamp.Grimoire.Desires.Mode == "2V2" then
+return (spot.Occupied.Bot >= 2 and spot.Partner.Occupied.Bot >= 2)
+else
+return spot.Partner.Occupied.Bot > 0
+end
 end
 if Trance.CurrentAltar then
 local current=Trance.CurrentAltar
-local partnerPresent = current.Partner.Occupied.Bot
-if partnerPresent then
+local loaded = CheckLoadingCondition(current)
+if loaded then
 if Trance.PartnerLockStartTime == 0 then Trance.PartnerLockStartTime = tick() end
 if tick() - Trance.PartnerLockStartTime >= 0.5 then Trance.IsLocked = true end
 else
 Trance.PartnerLockStartTime = 0
 Trance.IsLocked = false
 end
-local intrusionDetected=current.Occupied.Top or current.Partner.Occupied.Top
-if intrusionDetected and not Trance.IsLocked then
-local escapeSpot=FindBestSpot();if escapeSpot then Vamp.Rituals.Dissipate(false);Vamp.Rituals.ShadowStep(escapeSpot)else Vamp.Rituals.Dissipate(true);Trance.CurrentAltar=nil;Vamp.Visage.Refresh("SCANNING")end
+local intrusion = false
+if Vamp.Grimoire.Desires.Mode == "2V2" then
+intrusion = (current.Occupied.Top > 0)
 else
-local partnerPresent=current.Partner.Occupied.Bot;if not partnerPresent then local betterSpot=FindBestSpot();if betterSpot and betterSpot.Partner.Occupied.Bot then Vamp.Rituals.Dissipate(false);Vamp.Rituals.ShadowStep(betterSpot);return end end;if partnerPresent then
-if current.Partner.Players.Bot then
-Vamp.Grimoire.Trance.TargetName = current.Partner.Players.Bot
+intrusion = (current.Occupied.Top > 0) or (current.Partner.Occupied.Top > 0)
 end
-Trance.LastLoadingTime=tick();Vamp.Visage.Refresh("LOADING")else if(tick()-Trance.LastLoadingTime>=0.5)then Vamp.Visage.Refresh("IDLE")end end end
+if intrusion and not Trance.IsLocked then
+local escapeSpot=FindBestSpot();
+if escapeSpot then
+Vamp.Rituals.Dissipate(false);
+Vamp.Rituals.ShadowStep(escapeSpot)
+else
+Vamp.Rituals.Dissipate(true);
+Trance.CurrentAltar=nil;
+Vamp.Visage.Refresh("SCANNING")
+end
+else
+if Vamp.Grimoire.Desires.Mode == "2V2" and Vamp.Grimoire.Desires.IsWinner and Vamp.Grimoire.Desires.Priority == "STANDARD" then
+if current.Partner.Occupied.Bot < 2 or current.Occupied.Bot < 2 then
+Vamp.Rituals.Dissipate(true)
+Trance.CurrentAltar=nil
+Vamp.Visage.Refresh("SCANNING")
+return
+end
+end
+if loaded then
+Vamp.Grimoire.Trance.TargetNames = {}
+if Vamp.Grimoire.Desires.Mode == "2V2" then
+if Vamp.Grimoire.Desires.IsWinner then
+if Vamp.Grimoire.Desires.Priority == "PRIORITY" then
+Vamp.Grimoire.Trance.TargetNames = current.Partner.Players.Bot
+end
+else
+if #current.Partner.Players.Bot > 0 then
+table.insert(Vamp.Grimoire.Trance.TargetNames, current.Partner.Players.Bot[1])
+end
+end
+else
+if current.Partner.Players.Bot[1] then
+Vamp.Grimoire.Trance.TargetNames = {current.Partner.Players.Bot[1]}
+end
+end
+-- [MODIFIED] Set LoadingStartTime only once per load cycle
+if Trance.LoadingStartTime == 0 then Trance.LoadingStartTime=tick() end
+Vamp.Visage.Refresh("LOADING")
+else
+-- [MODIFIED] Reset LoadingStartTime and handle Idle logic
+Trance.LoadingStartTime = 0
+-- Only switch to IDLE if we were previously loading for a bit, OR just entered.
+-- The original code used a timer delay for IDLE, but now we just check loaded status.
+Vamp.Visage.Refresh("IDLE")
+end
+end
 else
 Trance.PartnerLockStartTime = 0
 Trance.IsLocked = false
-if(tick()-Trance.LastLoadingTime<0.5)and not Trance.InMatch and not Trance.InVoting then Vamp.Visage.Refresh("LOADING")else local best=FindBestSpot();if best then Vamp.Rituals.ShadowStep(best)end;if(tick()-Trance.LastLoadingTime>=0.5)then Vamp.Visage.Refresh(best and(best.Partner.Occupied.Bot and"LOADING"or"IDLE")or"SCANNING")end end end
+-- [MODIFIED] Reset LoadingStartTime
+Trance.LoadingStartTime = 0
+local best=FindBestSpot();
+if best then
+Vamp.Rituals.ShadowStep(best)
+else
+Vamp.Rituals.Dissipate(false)
+end
+Vamp.Visage.Refresh(best and(CheckLoadingCondition(best) and"LOADING"or"IDLE")or"SCANNING")
+end
+end
+if currentAltar and scanPos and hrp and not Trance.InMatch then local dist=(hrp.Position-scanPos).Magnitude;if dist<Law.WatchdogRadius then Vamp.Rituals.ShadowStep(currentAltar);return end end
 end)
 end
 Vamp.Rituals.RecallDesires()
