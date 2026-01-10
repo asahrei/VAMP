@@ -4,7 +4,6 @@ if not game:IsLoaded() then game.Loaded:Wait() end
 local Players=game:GetService("Players")
 local LP=Players.LocalPlayer
 if not LP.Character then LP.CharacterAdded:Wait() end
--- [ADDED] LoadingStartTime to Trance to track duration correctly
 local Vamp={Minions={},Bloodline={},Grimoire={},Rituals={},Visage={Elements={},State={IsNotifying=false,CurrentHoveredTopBtn=nil}},Prophecy={}}
 Vamp.Minions={Players=game:GetService("Players"),CoreGui=game:GetService("CoreGui"),RunService=game:GetService("RunService"),ReplicatedStorage=game:GetService("ReplicatedStorage"),HttpService=game:GetService("HttpService"),TeleportService=game:GetService("TeleportService"),TweenService=game:GetService("TweenService"),UserInputService=game:GetService("UserInputService"),VirtualUser=game:GetService("VirtualUser"),Stats=game:GetService("Stats"),GuiService=game:GetService("GuiService")}
 Vamp.Bloodline={
@@ -16,7 +15,6 @@ GREY_BASE=Color3.fromRGB(100,100,105), GREY_DARK=Color3.fromRGB(40,40,45),
 ORANGE_BASE=Color3.fromRGB(200,100,20), ORANGE_DARK=Color3.fromRGB(80,30,0),
 BG=Color3.fromRGB(8,8,10), TXT=Color3.fromRGB(240,240,240), DIM=Color3.fromRGB(120,120,120), SNOW=Color3.fromRGB(200,200,210)
 }
--- [MODIFIED] Added LoadingStartTime to Trance
 Vamp.Grimoire={Law={FileName="VampStreakFarmer.lua",SaveFile="VampFarm_"..LP.Name..".json",ScanningPos=nil,VotingPos=Vector3.new(150,-508,-888),SeatInitPos=Vector3.new(0,5000,0),QueueY=-124,SeatY=-130.75,SpotRadiusSq1v1=16,SpotRadiusSq2v2=22.4,TopYThreshold=-116,BotYThreshold=-117,LobbyY=-118,LobbyCenter=Vector3.new(-45,-118,38),LobbyLeaveTolerance=20,LobbyReturnProximity=60,ReturnTimeout=40,TeleportHoverTime=0.1,WatchdogRadius=30,AuraColors={}},Desires={Active=false,IsWinner=true,FarmedWins=0,Mode="1V1",Priority="STANDARD"},Trance={CurrentAltar=nil,InMatch=false,InVoting=false,LastStatus="",LoadingStartTime=0,MatchRemoteActive=false,HasQueuedTeleport=false,TargetNames={},PartnerLockStartTime=0,IsLocked=false},Altars={}}
 Vamp.Grimoire.Law.AuraColors={OFF="RED",SCANNING="GREEN",IDLE="BLUE",LOADING="PURPLE",PLAYING="PURPLE",COOLDOWN="GREY",CHOOSING_MAP="ORANGE",REJOINING="PURPLE"}
 local Altars1v1={{X=31.8,Z=15.7,Index=1},{X=37.45,Z=15.7,Index=2},{X=31.8,Z=57.0,Index=3},{X=37.45,Z=57.0,Index=4}}
@@ -378,18 +376,14 @@ end
 Vamp.Visage.Elements.UptimeLabel=CreateStat("UPTIME",0);Vamp.Visage.Elements.FPSLabel=CreateStat("FPS",22);Vamp.Visage.Elements.PingLabel=CreateStat("PING",44);Vamp.Visage.Elements.RoleStatLabel=CreateStat("ROLE",66);Vamp.Visage.Elements.PosLabel=CreateStat("POSITION",88);Vamp.Visage.Elements.FarmedWinsLabel=CreateStat("FARMED WINS",110)
 local ControlsFrame=Instance.new("Frame",MainFrame);ControlsFrame.BackgroundTransparency=1;ControlsFrame.Position=UDim2.new(0,15,0,195);ControlsFrame.Size=UDim2.new(1,-30,0,100);ControlsFrame.ZIndex=2
 Vamp.Visage.ButtonFactory.Create(ControlsFrame,{Name="PowerBtn",Position=UDim2.new(0,0,0,0),Size=UDim2.new(0.48,0,0,40),StateMapper=function()return Vamp.Grimoire.Desires.Active and"ON"or"OFF",Vamp.Grimoire.Desires.Active and "GREEN" or "RED" end,OnClick=function()
--- [MODIFIED] Power Button Logic
--- 1. Check if In Match
 if Vamp.Grimoire.Trance.InMatch then
 Vamp.Visage.Notify("[VAMP]", "Wait Until The Match Finishes.")
 return
 end
--- 2. Check if Choosing Map (Voting)
 if Vamp.Grimoire.Trance.InVoting then
 Vamp.Visage.Notify("[VAMP]", "Just Choose Your Map.")
 return
 end
--- 3. Check Loading Duration (using new LoadingStartTime)
 if Vamp.Grimoire.Desires.Active then
 if Vamp.Grimoire.Trance.LoadingStartTime ~= 0 and (tick() - Vamp.Grimoire.Trance.LoadingStartTime >= 0.5) then
 Vamp.Visage.Notify("[VAMP]", "You Are Already Loading.")
@@ -401,11 +395,10 @@ Vamp.Rituals.ScribeDesires();
 if Vamp.Grimoire.Desires.Active then
 Vamp.Rituals.Dissipate(false)
 else
--- 4. Check status to see if we should teleport back (Only if IDLE)
 local currentStatus = Vamp.Grimoire.Trance.LastStatus
 local shouldTeleport = (currentStatus == "IDLE")
 Vamp.Grimoire.Trance.CurrentAltar=nil;
-Vamp.Grimoire.Trance.LoadingStartTime=0 -- Reset timer
+Vamp.Grimoire.Trance.LoadingStartTime=0
 Vamp.Rituals.Dissipate(shouldTeleport)
 end;
 Vamp.Visage.Refresh()
@@ -640,21 +633,16 @@ if current.Partner.Players.Bot[1] then
 Vamp.Grimoire.Trance.TargetNames = {current.Partner.Players.Bot[1]}
 end
 end
--- [MODIFIED] Set LoadingStartTime only once per load cycle
 if Trance.LoadingStartTime == 0 then Trance.LoadingStartTime=tick() end
 Vamp.Visage.Refresh("LOADING")
 else
--- [MODIFIED] Reset LoadingStartTime and handle Idle logic
 Trance.LoadingStartTime = 0
--- Only switch to IDLE if we were previously loading for a bit, OR just entered.
--- The original code used a timer delay for IDLE, but now we just check loaded status.
 Vamp.Visage.Refresh("IDLE")
 end
 end
 else
 Trance.PartnerLockStartTime = 0
 Trance.IsLocked = false
--- [MODIFIED] Reset LoadingStartTime
 Trance.LoadingStartTime = 0
 local best=FindBestSpot();
 if best then
