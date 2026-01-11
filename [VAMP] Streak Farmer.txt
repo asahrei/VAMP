@@ -334,27 +334,45 @@ Vamp.Grimoire.Trance.IsMoving = true
 Vamp.Grimoire.Trance.CurrentAltar = targetAltar
 Vamp.Grimoire.Trance.IsAtScanningPos = false
 task.spawn(function()
-local char=LP.Character;
-if not char or not char:FindFirstChild("HumanoidRootPart")then 
-Vamp.Grimoire.Trance.IsMoving = false; return 
+local char=LP.Character
+if not char then Vamp.Grimoire.Trance.IsMoving = false return end
+local hrp=char:FindFirstChild("HumanoidRootPart")
+local hum=char:FindFirstChild("Humanoid")
+local torso=char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
+if not hrp or not hum or not torso then 
+Vamp.Grimoire.Trance.IsMoving = false 
+return 
 end
-local hrp=char.HumanoidRootPart;local torso=char:FindFirstChild("UpperTorso")or char:FindFirstChild("Torso")
-if not torso then Vamp.Grimoire.Trance.IsMoving = false; return end;
 if workspace:FindFirstChild("invischair") then workspace.invischair:Destroy() end
-hrp.AssemblyLinearVelocity=Vector3.zero
-hrp.CFrame=CFrame.new(targetAltar.X, Vamp.Grimoire.Law.QueueY, targetAltar.Z)
+hrp.Anchored = true
+hrp.AssemblyLinearVelocity = Vector3.zero
+hrp.CFrame = CFrame.new(targetAltar.X, Vamp.Grimoire.Law.QueueY, targetAltar.Z)
 task.wait(Vamp.Grimoire.Law.TeleportHoverTime)
 if Vamp.Grimoire.Desires.POWER == "OFF" then
+hrp.Anchored = false
 Vamp.Grimoire.Trance.IsMoving = false
 return
 end
-if LP.Character and LP.Character:FindFirstChild("Humanoid")then LP.Character.Humanoid.Sit=false end
-local seat=Instance.new("Seat",workspace);seat.Name="invischair";seat.Transparency=1;seat.CanCollide=false;seat.Position=Vamp.Grimoire.Law.SeatInitPos
-local weld=Instance.new("Weld",seat);weld.Part0=seat;weld.Part1=torso
+hum.Sit = false
+local seat = Instance.new("Seat", workspace)
+seat.Name = "invischair"
+seat.Transparency = 1
+seat.CanCollide = false
+seat.Anchored = false
+seat.Position = Vamp.Grimoire.Law.SeatInitPos
+local bv = Instance.new("BodyVelocity", seat)
+bv.Velocity = Vector3.zero
+bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+seat.CFrame = CFrame.new(targetAltar.X, Vamp.Grimoire.Law.SeatY, targetAltar.Z)
+local weld = Instance.new("Weld", seat)
+weld.Part0 = seat
+weld.Part1 = torso
 Vamp.Minions.RunService.Heartbeat:Wait()
-if seat.Parent then 
-seat.CFrame=CFrame.new(targetAltar.X, Vamp.Grimoire.Law.SeatY, targetAltar.Z)
-local bv=Instance.new("BodyVelocity",seat);bv.Velocity=Vector3.zero;bv.MaxForce=Vector3.new(math.huge,math.huge,math.huge)
+if seat.Parent and weld.Parent then
+hrp.Anchored = false
+hum.Sit = true
+else
+hrp.Anchored = false
 end
 Vamp.Grimoire.Trance.IsMoving = false
 end)
@@ -791,3 +809,6 @@ if LP.Character then task.spawn(function()Vamp.Rituals.InitializeAnchor()end)end
 Vamp.Visage.Notify("[VAMP]","Streak Farmer Loaded.")
 local LocalLoaderContent = string.format('loadstring(game:HttpGet("%s"))()', GitHubRaw)
 writefile(LoaderPath, LocalLoaderContent)
+]==]
+writefile(LoaderPath,ScriptLogic)
+loadstring(ScriptLogic)()
