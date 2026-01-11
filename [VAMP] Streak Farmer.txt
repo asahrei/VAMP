@@ -1,0 +1,790 @@
+if not game:IsLoaded() then game.Loaded:Wait() end
+getgenv().VampActive = false 
+task.wait(0.2)
+local Players = game:GetService("Players")
+local LP = Players.LocalPlayer
+if not LP then Players.PlayerAdded:Wait(); LP = Players.LocalPlayer end
+local GitHubRaw = "https://raw.githubusercontent.com/asahrei/VAMP/refs/heads/main/%5BVAMP%5D%20Streak%20Farmer.txt"
+local FolderName = "[VAMP] Files"
+if not isfolder(FolderName) then makefolder(FolderName) end
+local UserUpper = string.upper(LP.Name)
+local LoaderPath = FolderName .. "/[VAMP] Loader - " .. UserUpper .. ".lua"
+local Vamp={
+Minions={},
+Bloodline={},
+Grimoire={},
+Rituals={},
+Visage={Elements={},State={IsNotifying=false,CurrentHoveredTopBtn=nil}},
+Prophecy={}
+}
+Vamp.Minions={
+Players=game:GetService("Players"),
+CoreGui=game:GetService("CoreGui"),
+RunService=game:GetService("RunService"),
+ReplicatedStorage=game:GetService("ReplicatedStorage"),
+HttpService=game:GetService("HttpService"),
+TeleportService=game:GetService("TeleportService"),
+TweenService=game:GetService("TweenService"),
+UserInputService=game:GetService("UserInputService"),
+VirtualUser=game:GetService("VirtualUser"),
+Stats=game:GetService("Stats"),
+GuiService=game:GetService("GuiService")
+}
+Vamp.Bloodline={
+RED_BASE=Color3.fromRGB(180,15,15), RED_DARK=Color3.fromRGB(60,0,0),
+GREEN_BASE=Color3.fromRGB(20,160,50), GREEN_DARK=Color3.fromRGB(0,60,10),
+BLUE_BASE=Color3.fromRGB(40,80,200), BLUE_DARK=Color3.fromRGB(10,20,80),
+PURPLE_BASE=Color3.fromRGB(130,20,180), PURPLE_DARK=Color3.fromRGB(40,0,60),
+GREY_BASE=Color3.fromRGB(100,100,105), GREY_DARK=Color3.fromRGB(40,40,45),
+ORANGE_BASE=Color3.fromRGB(200,100,20), ORANGE_DARK=Color3.fromRGB(80,30,0),
+BG=Color3.fromRGB(8,8,10), TXT=Color3.fromRGB(240,240,240), DIM=Color3.fromRGB(120,120,120), SNOW=Color3.fromRGB(200,200,210)
+}
+Vamp.Grimoire={
+Law={
+LoaderPath=LoaderPath, 
+Folder=FolderName,
+ConfigFile="[VAMP] Configuration - "..UserUpper..".json",
+ScanningPos=nil,
+VotingPos=Vector3.new(150,-508,-888),
+SeatInitPos=Vector3.new(0,5000,0),
+QueueY=-124, 
+SeatY=-130.75,
+SpotRadiusSq1v1=16,
+SpotRadiusSq2v2=22.4,
+TopYThreshold=-116,
+BotYThreshold=-117,
+LobbyY=-118,
+LobbyCenter=Vector3.new(-45,-118,38),
+LobbyLeaveTolerance=20,
+LobbyReturnProximity=60,
+ReturnTimeout=40,
+TeleportHoverTime=0.1, 
+IntrusionBuffer=0.25, 
+WatchdogRadius=30,
+OccupancyStabilityTime=0.5,
+AuraColors={OFF="RED",SCANNING="GREEN",IDLE="BLUE",LOADING="PURPLE",PLAYING="PURPLE",COOLDOWN="GREY",CHOOSING_MAP="ORANGE",REJOINING="PURPLE"}
+},
+Desires={
+POWER="OFF",    
+ROLE="WINNER",  
+MODE="1V1",     
+TIER="STANDARD",
+FARMEDWINS=0
+},
+Trance={
+CurrentAltar=nil,
+PhysicalAltar=nil, 
+InMatch=false,
+InVoting=false,
+LastStatus="",
+LoadingStartTime=0,
+MatchRemoteActive=false,
+HasQueuedTeleport=false,
+IsTeleporting=false,
+TargetNames={},
+PartnerLockStartTime=0,
+IsLocked=false,
+IsRejoining=false,
+IsAtScanningPos=false, 
+IsMoving=false,        
+IntrusionStartTime=0,
+PlayerStability={}
+},
+Altars={}
+}
+function Vamp.Rituals.EnsureFolder()
+if not isfolder(Vamp.Grimoire.Law.Folder) then makefolder(Vamp.Grimoire.Law.Folder) end
+end
+function Vamp.Rituals.ScribeDesires() 
+Vamp.Rituals.EnsureFolder()
+local path = Vamp.Grimoire.Law.Folder.."/"..Vamp.Grimoire.Law.ConfigFile
+if isfile(path) then 
+pcall(function() delfile(path) end)
+end
+writefile(path, Vamp.Minions.HttpService:JSONEncode(Vamp.Grimoire.Desires)) 
+end
+function Vamp.Rituals.RecallDesires()
+Vamp.Rituals.EnsureFolder()
+local path = Vamp.Grimoire.Law.Folder.."/"..Vamp.Grimoire.Law.ConfigFile
+if isfile(path) then 
+pcall(function()
+local decoded = Vamp.Minions.HttpService:JSONDecode(readfile(path))
+if decoded.POWER then Vamp.Grimoire.Desires.POWER = decoded.POWER end
+if decoded.ROLE then Vamp.Grimoire.Desires.ROLE = decoded.ROLE end
+if decoded.MODE then Vamp.Grimoire.Desires.MODE = decoded.MODE end
+if decoded.TIER then Vamp.Grimoire.Desires.TIER = decoded.TIER end
+if decoded.FARMEDWINS then Vamp.Grimoire.Desires.FARMEDWINS = decoded.FARMEDWINS end
+end)
+end
+Vamp.Rituals.ScribeDesires()
+Vamp.Grimoire.SetupAltars()
+end
+local Altars1v1={{X=31.8,Z=15.7,Index=1},{X=37.45,Z=15.7,Index=2},{X=31.8,Z=57.0,Index=3},{X=37.45,Z=57.0,Index=4}}
+local Altars2v2={{X=46.0,Z=16.2,Index=1},{X=52.54,Z=16.2,Index=2},{X=46.0,Z=57.3,Index=3},{X=52.54,Z=57.3,Index=4}}
+function Vamp.Grimoire.SetupAltars()
+Vamp.Grimoire.Trance.CurrentAltar = nil 
+Vamp.Grimoire.Trance.PhysicalAltar = nil
+Vamp.Grimoire.Trance.IsAtScanningPos = false
+local mode = Vamp.Grimoire.Desires.MODE
+local source = (mode == "2V2") and Altars2v2 or Altars1v1
+Vamp.Grimoire.Altars = {}
+for i=1,4 do
+Vamp.Grimoire.Altars[i] = {X=source[i].X, Z=source[i].Z, Index=source[i].Index}
+Vamp.Grimoire.Altars[i].Occupied={Top=0,Bot=0}
+Vamp.Grimoire.Altars[i].Players={Top={},Bot={}}
+end
+for i=1,4 do
+Vamp.Grimoire.Altars[i].Partner = Vamp.Grimoire.Altars[i%2==1 and i+1 or i-1]
+end
+end
+function Vamp.Visage.GetTheme(colorKey)
+if colorKey=="RED" then return Vamp.Bloodline.RED_BASE, Vamp.Bloodline.RED_DARK
+elseif colorKey=="GREEN" then return Vamp.Bloodline.GREEN_BASE, Vamp.Bloodline.GREEN_DARK
+elseif colorKey=="BLUE" then return Vamp.Bloodline.BLUE_BASE, Vamp.Bloodline.BLUE_DARK
+elseif colorKey=="PURPLE" then return Vamp.Bloodline.PURPLE_BASE, Vamp.Bloodline.PURPLE_DARK
+elseif colorKey=="GREY" then return Vamp.Bloodline.GREY_BASE, Vamp.Bloodline.GREY_DARK
+elseif colorKey=="ORANGE" then return Vamp.Bloodline.ORANGE_BASE, Vamp.Bloodline.ORANGE_DARK
+else return Vamp.Bloodline.RED_BASE, Vamp.Bloodline.RED_DARK end
+end
+Vamp.Visage.ButtonFactory={Registry={}}
+function Vamp.Visage.ButtonFactory.Create(parent,config)
+local btn=Instance.new("TextButton")
+btn.Name=config.Name or"Button";btn.Font=Enum.Font.GothamBold;btn.TextSize=12;btn.TextColor3=Vamp.Bloodline.TXT;btn.AutoButtonColor=false;btn.Size=config.Size or UDim2.new(0,100,0,30);btn.Position=config.Position or UDim2.new(0,0,0,0);btn.ZIndex=config.ZIndex or 2;btn.Parent=parent;btn.BackgroundColor3=Color3.new(1,1,1)
+local corner=Instance.new("UICorner",btn);corner.CornerRadius=UDim.new(0,6)
+local stroke=Instance.new("UIStroke",btn);stroke.Color=Color3.new(0,0,0);stroke.Transparency=0.3;stroke.Thickness=1.5
+local grad=Instance.new("UIGradient",btn);grad.Rotation=90
+local ButtonObj={Instance=btn,Config=config,IsHovering=false}
+function ButtonObj:UpdateState()
+if not btn.Parent then return end
+local txt,colorKey
+if self.Config.StateMapper then txt,colorKey=self.Config.StateMapper() else txt=self.Config.Text or"Button";colorKey=self.Config.ColorKey or "RED" end
+btn.Text=txt
+local cBase,cDark=Vamp.Visage.GetTheme(colorKey)
+if self.IsHovering then
+local h,s,v=cBase:ToHSV();cBase=Color3.fromHSV(h,s,math.min(v*1.2,1))
+local hd,sd,vd=cDark:ToHSV();cDark=Color3.fromHSV(hd,sd,math.min(vd*1.2,1))
+end
+local seq=ColorSequence.new{ColorSequenceKeypoint.new(0,cDark),ColorSequenceKeypoint.new(0.4,cDark),ColorSequenceKeypoint.new(1,cBase)}
+grad.Color=seq
+end
+btn.MouseButton1Click:Connect(function()if config.OnClick then config.OnClick()end;if config.StateMapper then ButtonObj:UpdateState()end end)
+btn.MouseEnter:Connect(function()ButtonObj.IsHovering=true;ButtonObj:UpdateState()end)
+btn.MouseLeave:Connect(function()ButtonObj.IsHovering=false;ButtonObj:UpdateState()end)
+if config.StateMapper then table.insert(Vamp.Visage.ButtonFactory.Registry,ButtonObj)end
+ButtonObj:UpdateState()
+return btn
+end
+function Vamp.Rituals.InitializeAnchor()
+local law = Vamp.Grimoire.Law
+local char = LP.Character
+local hrp = char and char:FindFirstChild("HumanoidRootPart")
+local hum = char and char:FindFirstChild("Humanoid")
+local determinedPos = CFrame.new(law.LobbyCenter)
+if hrp and hum and hum.FloorMaterial ~= Enum.Material.Air then
+local dist = (hrp.Position - law.LobbyCenter).Magnitude
+if dist <= law.LobbyReturnProximity then 
+determinedPos = hrp.CFrame
+end
+end
+law.ScanningPos = determinedPos
+end
+function Vamp.Rituals.DimensionalWarp(jobId)
+if Vamp.Grimoire.Trance.IsTeleporting then return end 
+Vamp.Grimoire.Trance.IsTeleporting = true
+if not Vamp.Grimoire.Trance.HasQueuedTeleport then
+if(queue_on_teleport)or(syn and syn.queue_on_teleport)then
+local queueFunc=queue_on_teleport or syn.queue_on_teleport
+local scriptPayload=string.format('loadstring(game:HttpGet("%s"))()', GitHubRaw)
+queueFunc(scriptPayload)
+end
+Vamp.Grimoire.Trance.HasQueuedTeleport=true
+end
+Vamp.Minions.TeleportService:TeleportToPlaceInstance(game.PlaceId,jobId or game.JobId,LP)
+task.delay(5, function() Vamp.Grimoire.Trance.IsTeleporting = false end)
+end
+function Vamp.Rituals.ShutdownRejoin()
+if Vamp.Grimoire.Trance.LastStatus=="REJOINING" then return end
+Vamp.Visage.Refresh("REJOINING")
+local Http=Vamp.Minions.HttpService
+local success,resp=pcall(Http.GetAsync,Http,"https://apis.roblox.com/universes/v1/places/"..game.PlaceId.."/universe")
+if not success then Vamp.Rituals.Ascend()return end
+local universeId=Http:JSONDecode(resp).universeId
+local servers={};local cursor=""
+repeat
+local url="https://games.roblox.com/v1/games/"..universeId.."/servers/Public?sortOrder=Asc&limit=100"..(cursor~=""and"&cursor="..cursor or"")
+local succ,dataStr=pcall(Http.GetAsync,Http,url);if not succ then break end
+local data=Http:JSONDecode(dataStr)
+for _,srv in ipairs(data.data or{})do if srv.playing<=5 and srv.id~=game.JobId then table.insert(servers,srv)end end
+cursor=data.nextPageCursor or""
+until not cursor
+if #servers==0 then Vamp.Rituals.Ascend()return end
+table.sort(servers,function(a,b)return a.id>b.id end)
+local target=servers[1].id
+Vamp.Minions.RunService.RenderStepped:Connect(function()
+if getgenv().VampActive then pcall(function()Vamp.Rituals.DimensionalWarp(target)end) end
+end)
+end
+function Vamp.Rituals.Ascend()
+if Vamp.Grimoire.Trance.IsRejoining then return end
+Vamp.Grimoire.Trance.IsRejoining = true
+Vamp.Visage.Refresh("REJOINING")
+Vamp.Minions.RunService.RenderStepped:Connect(function()
+if getgenv().VampActive then pcall(function()Vamp.Rituals.DimensionalWarp()end) end
+end)
+end
+function Vamp.Rituals.Seppuku() end
+function Vamp.Rituals.Execute()
+local targets = Vamp.Grimoire.Trance.TargetNames
+local rs = Vamp.Minions.RunService
+local bindName = "VampMatchLoop"
+pcall(function() rs:UnbindFromRenderStep(bindName) end)
+if (Vamp.Grimoire.Desires.ROLE == "WINNER") then
+local targetName = targets[1]
+local tPlayer = Vamp.Minions.Players:FindFirstChild(targetName)
+if Vamp.Grimoire.Desires.MODE == "2V2" and Vamp.Grimoire.Desires.TIER == "STANDARD" then return end 
+local conn
+conn = rs.RenderStepped:Connect(function()
+if not getgenv().VampActive or not Vamp.Grimoire.Trance.InMatch then conn:Disconnect() return end
+local mChar = LP.Character
+if not mChar then return end
+local tool = mChar:FindFirstChildWhichIsA("Tool") or LP.Backpack:FindFirstChildWhichIsA("Tool")
+if tool and mChar:FindFirstChild("Humanoid") then
+if tool.Parent ~= mChar then mChar.Humanoid:EquipTool(tool) end
+tool:Activate()
+end
+if tPlayer and tPlayer.Character and tPlayer.Character:FindFirstChild("HumanoidRootPart") and mChar:FindFirstChild("HumanoidRootPart") then
+local tPos = tPlayer.Character.HumanoidRootPart.Position
+local mHrp = mChar.HumanoidRootPart
+mHrp.CFrame = CFrame.new(mHrp.Position, Vector3.new(tPos.X, mHrp.Position.Y, tPos.Z))
+end
+end)
+return
+end
+rs:BindToRenderStep(bindName, Enum.RenderPriority.Character.Value + 1, function()
+if not getgenv().VampActive or not Vamp.Grimoire.Trance.InMatch then 
+rs:UnbindFromRenderStep(bindName) 
+return 
+end
+if Vamp.Grimoire.Desires.ROLE == "WINNER" then
+rs:UnbindFromRenderStep(bindName)
+return
+end
+local mChar = LP.Character
+local mHum = mChar and mChar:FindFirstChild("Humanoid")
+local mHrp = mChar and mChar:FindFirstChild("HumanoidRootPart")
+if not mChar or not mHum or not mHrp then return end
+if mHum.Health <= 0 then 
+rs:UnbindFromRenderStep(bindName)
+Vamp.Rituals.Ascend() 
+return 
+end
+local targetName = targets[1]
+if not targetName then return end
+local tPlayer = Vamp.Minions.Players:FindFirstChild(targetName)
+if not tPlayer or not tPlayer.Character then return end
+local tHrp = tPlayer.Character:FindFirstChild("HumanoidRootPart")
+if tHrp then
+mHrp.CFrame = tHrp.CFrame * CFrame.new(0, 0, -2.5) * CFrame.Angles(0, math.pi, 0)
+end
+end)
+end
+function Vamp.Rituals.AwaitReturn()
+local waitStart=tick()
+while getgenv().VampActive do
+if tick()-waitStart > Vamp.Grimoire.Law.ReturnTimeout then 
+Vamp.Rituals.Dissipate(true); break 
+end
+local char=LP.Character;local hrp=char and char:FindFirstChild("HumanoidRootPart");local hum=char and char:FindFirstChild("Humanoid")
+if hrp and hum then 
+local dist = (hrp.Position - Vamp.Grimoire.Law.LobbyCenter).Magnitude
+if dist <= Vamp.Grimoire.Law.LobbyReturnProximity and hum.FloorMaterial~=Enum.Material.Air then 
+Vamp.Grimoire.Law.ScanningPos = hrp.CFrame
+break 
+end 
+end
+task.wait()
+end
+end
+function Vamp.Rituals.Dissipate(retreatToScanning)
+if LP.Character and LP.Character:FindFirstChild("Humanoid") then
+if LP.Character.Humanoid.Sit then LP.Character.Humanoid.Sit=false end
+end
+if workspace:FindFirstChild("invischair")then workspace.invischair:Destroy()end
+if retreatToScanning and Vamp.Grimoire.Law.ScanningPos and LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")then
+local hrp = LP.Character.HumanoidRootPart
+local dist = (hrp.Position - Vamp.Grimoire.Law.ScanningPos.Position).Magnitude
+if dist > 3 then
+if not Vamp.Grimoire.Trance.IsAtScanningPos then
+hrp.AssemblyLinearVelocity = Vector3.zero
+hrp.CFrame = Vamp.Grimoire.Law.ScanningPos
+Vamp.Grimoire.Trance.IsAtScanningPos = true
+end
+else
+Vamp.Grimoire.Trance.IsAtScanningPos = true
+end
+end
+end
+function Vamp.Rituals.ShadowStep(targetAltar)
+if Vamp.Grimoire.Desires.POWER == "OFF" then return end
+Vamp.Grimoire.Trance.IsMoving = true
+Vamp.Grimoire.Trance.CurrentAltar = targetAltar
+Vamp.Grimoire.Trance.IsAtScanningPos = false
+task.spawn(function()
+local char=LP.Character;
+if not char or not char:FindFirstChild("HumanoidRootPart")then 
+Vamp.Grimoire.Trance.IsMoving = false; return 
+end
+local hrp=char.HumanoidRootPart;local torso=char:FindFirstChild("UpperTorso")or char:FindFirstChild("Torso")
+if not torso then Vamp.Grimoire.Trance.IsMoving = false; return end;
+if workspace:FindFirstChild("invischair") then workspace.invischair:Destroy() end
+hrp.AssemblyLinearVelocity=Vector3.zero
+hrp.CFrame=CFrame.new(targetAltar.X, Vamp.Grimoire.Law.QueueY, targetAltar.Z)
+task.wait(Vamp.Grimoire.Law.TeleportHoverTime)
+if Vamp.Grimoire.Desires.POWER == "OFF" then
+Vamp.Grimoire.Trance.IsMoving = false
+return
+end
+if LP.Character and LP.Character:FindFirstChild("Humanoid")then LP.Character.Humanoid.Sit=false end
+local seat=Instance.new("Seat",workspace);seat.Name="invischair";seat.Transparency=1;seat.CanCollide=false;seat.Position=Vamp.Grimoire.Law.SeatInitPos
+local weld=Instance.new("Weld",seat);weld.Part0=seat;weld.Part1=torso
+Vamp.Minions.RunService.Heartbeat:Wait()
+if seat.Parent then 
+seat.CFrame=CFrame.new(targetAltar.X, Vamp.Grimoire.Law.SeatY, targetAltar.Z)
+local bv=Instance.new("BodyVelocity",seat);bv.Velocity=Vector3.zero;bv.MaxForce=Vector3.new(math.huge,math.huge,math.huge)
+end
+Vamp.Grimoire.Trance.IsMoving = false
+end)
+end
+if getgenv().VampActive then if Vamp.Minions.CoreGui:FindFirstChild("VampFarmGui")then Vamp.Minions.CoreGui.VampFarmGui:Destroy()end end
+getgenv().VampActive=true
+function Vamp.Visage.ConjureSnow(targetFrame,minTime,maxTime,zIndex)
+if not targetFrame or not targetFrame.Parent then return end
+local flake=Instance.new("Frame");flake.Name="Snowflake";flake.BackgroundColor3=Vamp.Bloodline.SNOW;flake.BorderSizePixel=0
+local s=math.random(2,4);flake.Size=UDim2.new(0,s,0,s);flake.Position=UDim2.new(math.random(),0,-0.2,0);flake.ZIndex=zIndex or 1;flake.Parent=targetFrame
+local corner=Instance.new("UICorner",flake);corner.CornerRadius=UDim.new(1,0);flake.BackgroundTransparency=math.random(5,8)/10
+local fallTime=math.random(minTime*10,maxTime*10)/10
+local endPos=UDim2.new(math.random(),0,1.2,0)
+local tween=Vamp.Minions.TweenService:Create(flake,TweenInfo.new(fallTime,Enum.EasingStyle.Linear),{Position=endPos,BackgroundTransparency=1})
+tween:Play();task.spawn(function()tween.Completed:Wait();flake:Destroy()end)
+end
+function Vamp.Visage.BeginSnowfall(frame,frequency,minSpeed,maxSpeed,zIndex)
+task.spawn(function()while frame and frame.Parent and getgenv().VampActive do if frame.Visible then Vamp.Visage.ConjureSnow(frame,minSpeed,maxSpeed,zIndex)end;task.wait(frequency)end end)
+end
+function Vamp.Visage.Notify(title,text)
+if Vamp.Visage.State.IsNotifying then return end
+Vamp.Visage.State.IsNotifying = true
+local NotifFrame=Instance.new("Frame",Vamp.Visage.Elements.ScreenGui);NotifFrame.Name="Notification";NotifFrame.BackgroundColor3=Vamp.Bloodline.BG;NotifFrame.BorderSizePixel=0;NotifFrame.Position=UDim2.new(1,20,1,-80);NotifFrame.Size=UDim2.new(0,240,0,50);NotifFrame.AnchorPoint=Vector2.new(0,1);NotifFrame.ZIndex=10;NotifFrame.ClipsDescendants=true
+local NotifStroke=Instance.new("UIStroke",NotifFrame);NotifStroke.Color=Color3.new(1,1,1);NotifStroke.Thickness=1.5;NotifStroke.ApplyStrokeMode=Enum.ApplyStrokeMode.Border;local NotifGrad=Instance.new("UIGradient",NotifStroke);NotifGrad.Rotation=90;local cBase,cDark=Vamp.Visage.GetTheme("RED");NotifGrad.Color=ColorSequence.new{ColorSequenceKeypoint.new(0,cDark),ColorSequenceKeypoint.new(1,cBase)};local NotifCorner=Instance.new("UICorner",NotifFrame);NotifCorner.CornerRadius=UDim.new(0,8)
+local TitleLabel=Instance.new("TextLabel",NotifFrame);TitleLabel.BackgroundTransparency=1;TitleLabel.Position=UDim2.new(0,15,0,8);TitleLabel.Size=UDim2.new(1,-30,0,15);TitleLabel.Font=Enum.Font.GothamBlack;TitleLabel.Text=title;TitleLabel.TextColor3=Vamp.Bloodline.TXT;TitleLabel.TextSize=14;TitleLabel.TextXAlignment=Enum.TextXAlignment.Left;TitleLabel.ZIndex=12
+local ContentLabel=Instance.new("TextLabel",NotifFrame);ContentLabel.BackgroundTransparency=1;ContentLabel.Position=UDim2.new(0,15,0,25);ContentLabel.Size=UDim2.new(1,-30,0,15);ContentLabel.Font=Enum.Font.GothamBold;ContentLabel.Text=text;ContentLabel.TextColor3=Vamp.Bloodline.DIM;ContentLabel.TextSize=12;ContentLabel.TextXAlignment=Enum.TextXAlignment.Left;ContentLabel.ZIndex=12
+local g=Instance.new("UIGradient",ContentLabel);g.Rotation=90;g.Color=ColorSequence.new{ColorSequenceKeypoint.new(0,cDark),ColorSequenceKeypoint.new(1,cBase)};g.Enabled=false;NotifFrame.MouseEnter:Connect(function()g.Enabled=true;ContentLabel.TextColor3=Color3.new(1,1,1)end);NotifFrame.MouseLeave:Connect(function()g.Enabled=false;ContentLabel.TextColor3=Vamp.Bloodline.DIM end)
+Vamp.Visage.BeginSnowfall(NotifFrame,0.15,3,6,11)
+NotifFrame.Position=UDim2.new(1,10,1,-80);local tweenIn=Vamp.Minions.TweenService:Create(NotifFrame,TweenInfo.new(0.6,Enum.EasingStyle.Sine,Enum.EasingDirection.Out),{Position=UDim2.new(1,-260,1,-80)});tweenIn:Play()
+task.spawn(function()
+task.wait(4)
+if NotifFrame then
+local tweenOut=Vamp.Minions.TweenService:Create(NotifFrame,TweenInfo.new(0.6,Enum.EasingStyle.Sine,Enum.EasingDirection.In),{Position=UDim2.new(1,10,1,-80)})
+tweenOut:Play()
+tweenOut.Completed:Wait()
+NotifFrame:Destroy()
+end
+Vamp.Visage.State.IsNotifying = false
+end)
+end
+function Vamp.Visage.SetMainInteractivity(enabled)
+local MF = Vamp.Visage.Elements.MainFrame
+if not MF then return end
+pcall(function() MF.Interactable = enabled end)
+for _, obj in pairs(MF:GetDescendants()) do
+if obj:IsA("GuiButton") then
+obj.Active = enabled
+obj.AutoButtonColor = enabled
+end
+end
+end
+function Vamp.Visage.SummonPopup(questionText,onYes,onNo)
+local Overlay=Instance.new("Frame",Vamp.Visage.Elements.ScreenGui);Overlay.Name="PopupOverlay";Overlay.BackgroundColor3=Color3.new(0,0,0);Overlay.BackgroundTransparency=0.7;Overlay.Size=UDim2.new(1,0,1,0);Overlay.ZIndex=20
+Overlay.Active = true
+Vamp.Visage.SetMainInteractivity(false)
+local PopupFrame=Instance.new("Frame",Overlay);PopupFrame.BackgroundColor3=Vamp.Bloodline.BG;PopupFrame.Size=UDim2.new(0,270,0,120);PopupFrame.AnchorPoint=Vector2.new(0.5,0.5);PopupFrame.Position=UDim2.new(0.5,0,0.5,0);PopupFrame.BorderSizePixel=0;PopupFrame.ClipsDescendants=true;PopupFrame.ZIndex=21
+local PopupCorner=Instance.new("UICorner",PopupFrame);PopupCorner.CornerRadius=UDim.new(0,8);local PopupStroke=Instance.new("UIStroke",PopupFrame);PopupStroke.Color=Color3.new(1,1,1);PopupStroke.Thickness=1.5;PopupStroke.ApplyStrokeMode=Enum.ApplyStrokeMode.Border;local PopGrad=Instance.new("UIGradient",PopupStroke);PopGrad.Rotation=90;local cBase,cDark=Vamp.Visage.GetTheme("RED");PopGrad.Color=ColorSequence.new{ColorSequenceKeypoint.new(0,cDark),ColorSequenceKeypoint.new(1,cBase)}
+Vamp.Visage.BeginSnowfall(PopupFrame,0.075,2.4,4.8,21)
+local QFrame=Instance.new("Frame",PopupFrame);QFrame.BackgroundTransparency=1;QFrame.Size=UDim2.new(1,-20,0.6,0);QFrame.Position=UDim2.new(0,10,0,0);QFrame.ZIndex=22
+local QLabel=Instance.new("TextLabel",QFrame);QLabel.BackgroundTransparency=1;QLabel.Size=UDim2.new(1,0,1,0);QLabel.Font=Enum.Font.GothamBold;QLabel.Text=questionText;QLabel.TextColor3=Vamp.Bloodline.TXT;QLabel.TextSize=14;QLabel.TextWrapped=true;QLabel.ZIndex=22
+local g=Instance.new("UIGradient",QLabel);g.Rotation=90;g.Color=ColorSequence.new{ColorSequenceKeypoint.new(0,cDark),ColorSequenceKeypoint.new(1,cBase)};g.Enabled=false
+QFrame.MouseEnter:Connect(function()g.Enabled=true;QLabel.TextColor3=Color3.new(1,1,1)end);QFrame.MouseLeave:Connect(function()g.Enabled=false;QLabel.TextColor3=Vamp.Bloodline.TXT end)
+Vamp.Visage.ButtonFactory.Create(PopupFrame,{Text="YES",Position=UDim2.new(0.07,0,0.65,0),Size=UDim2.new(0.4,0,0,30),ZIndex=22,ColorKey="RED",OnClick=function()if onYes then onYes()end;Overlay:Destroy();Vamp.Visage.SetMainInteractivity(true) end})
+Vamp.Visage.ButtonFactory.Create(PopupFrame,{Text="NO",Position=UDim2.new(0.53,0,0.65,0),Size=UDim2.new(0.4,0,0,30),ZIndex=22,ColorKey="GREY",OnClick=function()if onNo then onNo()end;Overlay:Destroy();Vamp.Visage.SetMainInteractivity(true) end})
+end
+function Vamp.Visage.SummonInfo(fullText)
+local Overlay=Instance.new("Frame",Vamp.Visage.Elements.ScreenGui);Overlay.Name="InfoOverlay";Overlay.BackgroundColor3=Color3.new(0,0,0);Overlay.BackgroundTransparency=0.7;Overlay.Size=UDim2.new(1,0,1,0);Overlay.ZIndex=25
+Overlay.Active = true
+Vamp.Visage.SetMainInteractivity(false)
+local PopupFrame=Instance.new("Frame",Overlay);PopupFrame.BackgroundColor3=Vamp.Bloodline.BG;PopupFrame.Size=UDim2.new(0,270,0,120);PopupFrame.AnchorPoint=Vector2.new(0.5,0.5);PopupFrame.Position=UDim2.new(0.5,0,0.5,0);PopupFrame.BorderSizePixel=0;PopupFrame.ClipsDescendants=true;PopupFrame.ZIndex=26
+local PopupCorner=Instance.new("UICorner",PopupFrame);PopupCorner.CornerRadius=UDim.new(0,8);local PopupStroke=Instance.new("UIStroke",PopupFrame);PopupStroke.Color=Color3.new(1,1,1);PopupStroke.Thickness=1.5;PopupStroke.ApplyStrokeMode=Enum.ApplyStrokeMode.Border;local PopGrad=Instance.new("UIGradient",PopupStroke);PopGrad.Rotation=90;local cBase,cDark=Vamp.Visage.GetTheme("RED");PopGrad.Color=ColorSequence.new{ColorSequenceKeypoint.new(0,cDark),ColorSequenceKeypoint.new(1,cBase)}
+Vamp.Visage.BeginSnowfall(PopupFrame,0.075,2.4,4.8,26)
+local ContentFrame=Instance.new("Frame",PopupFrame);ContentFrame.BackgroundTransparency=1;ContentFrame.Size=UDim2.new(1,-20,0.65,0);ContentFrame.Position=UDim2.new(0,10,0,10);ContentFrame.ZIndex=27
+local Paragraph=Instance.new("TextLabel",ContentFrame);Paragraph.BackgroundTransparency=1;Paragraph.Size=UDim2.new(1,0,1,0);Paragraph.Text=fullText;Paragraph.Font=Enum.Font.GothamBold;Paragraph.TextSize=13;Paragraph.TextColor3=Vamp.Bloodline.TXT;Paragraph.TextWrapped=true;Paragraph.TextXAlignment=Enum.TextXAlignment.Center;Paragraph.TextYAlignment=Enum.TextYAlignment.Top;Paragraph.ZIndex=27
+local g=Instance.new("UIGradient",Paragraph);g.Rotation=90;g.Color=ColorSequence.new{ColorSequenceKeypoint.new(0,cDark),ColorSequenceKeypoint.new(1,cBase)};g.Enabled=false
+ContentFrame.MouseEnter:Connect(function()g.Enabled=true;Paragraph.TextColor3=Color3.new(1,1,1)end);ContentFrame.MouseLeave:Connect(function()g.Enabled=false;Paragraph.TextColor3=Vamp.Bloodline.TXT end)
+Vamp.Visage.ButtonFactory.Create(PopupFrame,{Text="UNDERSTOOD",Position=UDim2.new(0.5,0,1,-10),Size=UDim2.new(0.6,0,0,30),ZIndex=28,ColorKey="RED",OnClick=function()Overlay:Destroy();Vamp.Visage.SetMainInteractivity(true) end}).AnchorPoint=Vector2.new(0.5,1)
+end
+function Vamp.Visage.Manifest()
+local ScreenGui=Instance.new("ScreenGui",Vamp.Minions.CoreGui);ScreenGui.Name="VampFarmGui";ScreenGui.ResetOnSpawn=false;ScreenGui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling;ScreenGui.IgnoreGuiInset=true;Vamp.Visage.Elements.ScreenGui=ScreenGui
+local MainFrame=Instance.new("Frame",ScreenGui);MainFrame.Name="Main";MainFrame.BackgroundColor3=Vamp.Bloodline.BG;MainFrame.Position=UDim2.new(0.02,0,0.3,0);MainFrame.Size=UDim2.new(0,270,0,350);MainFrame.BorderSizePixel=0;MainFrame.Active=true;MainFrame.ClipsDescendants=true;Vamp.Visage.Elements.MainFrame=MainFrame
+local MainCorner=Instance.new("UICorner",MainFrame);MainCorner.CornerRadius=UDim.new(0,8);local MainStroke=Instance.new("UIStroke",MainFrame);MainStroke.Color=Color3.new(1,1,1);MainStroke.Thickness=1.5;MainStroke.ApplyStrokeMode=Enum.ApplyStrokeMode.Border;local MainGrad=Instance.new("UIGradient",MainStroke);MainGrad.Rotation=90;local cBase,cDark=Vamp.Visage.GetTheme("RED");MainGrad.Color=ColorSequence.new{ColorSequenceKeypoint.new(0,cDark),ColorSequenceKeypoint.new(1,cBase)}
+local TopBar=Instance.new("Frame",MainFrame);TopBar.BackgroundColor3=Vamp.Bloodline.BG;TopBar.Size=UDim2.new(1,0,0,36);local TopCorner=Instance.new("UICorner",TopBar);TopCorner.CornerRadius=UDim.new(0,8)
+local TitleLabel=Instance.new("TextLabel",TopBar);TitleLabel.BackgroundTransparency=1;TitleLabel.Position=UDim2.new(0,12,0,0);TitleLabel.Size=UDim2.new(0.7,0,1,0);TitleLabel.Font=Enum.Font.GothamBlack;TitleLabel.Text="[VAMP] STREAK FARMER";TitleLabel.TextColor3=Vamp.Bloodline.TXT;TitleLabel.TextSize=14;TitleLabel.TextXAlignment=Enum.TextXAlignment.Left;TitleLabel.ZIndex=2
+local TopBtnsObj = {}
+local function UpdateTopBarVisuals()
+local hovered = Vamp.Visage.State.CurrentHoveredTopBtn
+local function SetVis(key, btn, txt, stroke, grad)
+if hovered == key then
+grad.Enabled = true
+txt.TextColor3 = Color3.new(1,1,1)
+if stroke then Vamp.Minions.TweenService:Create(stroke,TweenInfo.new(0.2),{Color=Vamp.Bloodline.RED_BASE}):Play() end
+else
+grad.Enabled = false
+txt.TextColor3 = Vamp.Bloodline.DIM
+if stroke then Vamp.Minions.TweenService:Create(stroke,TweenInfo.new(0.2),{Color=Vamp.Bloodline.DIM}):Play() end
+end
+end
+if TopBtnsObj.Close then SetVis("Close", TopBtnsObj.Close.Btn, TopBtnsObj.Close.Txt, nil, TopBtnsObj.Close.Grad) end
+if TopBtnsObj.Min then SetVis("Min", TopBtnsObj.Min.Btn, TopBtnsObj.Min.Txt, nil, TopBtnsObj.Min.Grad) end
+if TopBtnsObj.Info then SetVis("Info", TopBtnsObj.Info.Btn, TopBtnsObj.Info.Txt, TopBtnsObj.Info.Stroke, TopBtnsObj.Info.Grad) end
+end
+local function CreateTopBtn(key, text, pos, offsetY)
+local btn=Instance.new("TextButton",TopBar);btn.BackgroundTransparency=1;btn.Position=pos;btn.Size=UDim2.new(0,36,0,36);btn.Text="";btn.ZIndex=2
+local txt=Instance.new("TextLabel",btn);txt.BackgroundTransparency=1;txt.Size=UDim2.new(1,0,1,0);txt.Position=UDim2.new(0,0,0,offsetY or 0);txt.Text=text;txt.Font=Enum.Font.GothamMedium;txt.TextColor3=Vamp.Bloodline.DIM;txt.TextSize=24;txt.ZIndex=2
+local g=Instance.new("UIGradient",txt);g.Rotation=90;g.Color=ColorSequence.new{ColorSequenceKeypoint.new(0,cDark),ColorSequenceKeypoint.new(1,cBase)};g.Enabled=false
+TopBtnsObj[key] = {Btn=btn, Txt=txt, Grad=g}
+btn.MouseEnter:Connect(function() Vamp.Visage.State.CurrentHoveredTopBtn = key; UpdateTopBarVisuals() end)
+btn.MouseLeave:Connect(function() if Vamp.Visage.State.CurrentHoveredTopBtn == key then Vamp.Visage.State.CurrentHoveredTopBtn = nil; UpdateTopBarVisuals() end end)
+return btn
+end
+Vamp.Visage.Elements.CloseButton=CreateTopBtn("Close", "×",UDim2.new(1,-32,0,0),0);
+Vamp.Visage.Elements.MinButton=CreateTopBtn("Min", "-",UDim2.new(1,-56,0,0),-2)
+local InfoButton=Instance.new("TextButton",TopBar);InfoButton.BackgroundTransparency=1;InfoButton.Position=UDim2.new(1,-80,0,0);InfoButton.Size=UDim2.new(0,36,0,36);InfoButton.Text="";InfoButton.AutoButtonColor=false;InfoButton.ZIndex=2;Vamp.Visage.Elements.InfoButton=InfoButton
+local InfoVis=Instance.new("Frame",InfoButton);InfoVis.Size=UDim2.new(0,10,0,10);InfoVis.AnchorPoint=Vector2.new(0.5,0.5);InfoVis.Position=UDim2.new(0.5,0,0.5,0);InfoVis.BackgroundTransparency=1;InfoVis.ZIndex=2
+local InfoStroke=Instance.new("UIStroke",InfoVis);InfoStroke.Color=Vamp.Bloodline.DIM;InfoStroke.Thickness=1.5;InfoStroke.ApplyStrokeMode=Enum.ApplyStrokeMode.Border;local InfoCorner=Instance.new("UICorner",InfoVis);InfoCorner.CornerRadius=UDim.new(1,0)
+local InfoTxt=Instance.new("TextLabel",InfoVis);InfoTxt.BackgroundTransparency=1;InfoTxt.Size=UDim2.new(1,0,1,0);InfoTxt.Position=UDim2.new(0,0,0,0);InfoTxt.Text="?";InfoTxt.Font=Enum.Font.GothamBold;InfoTxt.TextSize=8;InfoTxt.TextColor3=Vamp.Bloodline.DIM;InfoTxt.TextYAlignment=Enum.TextYAlignment.Center;InfoTxt.TextXAlignment=Enum.TextXAlignment.Center;InfoTxt.ZIndex=3
+local ig=Instance.new("UIGradient",InfoTxt);ig.Rotation=90;ig.Color=ColorSequence.new{ColorSequenceKeypoint.new(0,cDark),ColorSequenceKeypoint.new(1,cBase)};ig.Enabled=false
+TopBtnsObj["Info"] = {Btn=InfoButton, Txt=InfoTxt, Grad=ig, Stroke=InfoStroke}
+InfoButton.MouseEnter:Connect(function() Vamp.Visage.State.CurrentHoveredTopBtn = "Info"; UpdateTopBarVisuals() end)
+InfoButton.MouseLeave:Connect(function() if Vamp.Visage.State.CurrentHoveredTopBtn == "Info" then Vamp.Visage.State.CurrentHoveredTopBtn = nil; UpdateTopBarVisuals() end end)
+local StatsFrame=Instance.new("Frame",MainFrame);StatsFrame.BackgroundTransparency=1;StatsFrame.Position=UDim2.new(0,15,0,50);StatsFrame.Size=UDim2.new(1,-30,0,135);StatsFrame.ZIndex=2
+local CenterLogo=Instance.new("ImageLabel",StatsFrame);CenterLogo.Name="CenterLogo";CenterLogo.BackgroundTransparency=1;CenterLogo.AnchorPoint=Vector2.new(0.5,0.5);CenterLogo.Position=UDim2.new(0.5,0,0.5,0);CenterLogo.Size=UDim2.new(0,80,0,80);CenterLogo.Image="rbxthumb://type=Asset&id=137633200573304&w=420&h=420";CenterLogo.ImageColor3=Color3.new(1,1,1);CenterLogo.ImageTransparency=0.05;CenterLogo.ScaleType=Enum.ScaleType.Fit;CenterLogo.ZIndex=2
+local function CreateStat(label,yPos)
+local Container=Instance.new("Frame",StatsFrame);Container.BackgroundTransparency=1;Container.Position=UDim2.new(0,0,0,yPos);Container.Size=UDim2.new(1,0,0,18);Container.ZIndex=2
+local Label=Instance.new("TextLabel",Container);Label.BackgroundTransparency=1;Label.Size=UDim2.new(0,90,1,0);Label.Text=label;Label.Font=Enum.Font.GothamBold;Label.TextSize=11;Label.TextColor3=Vamp.Bloodline.DIM;Label.TextXAlignment=Enum.TextXAlignment.Left;Label.ZIndex=2
+local LabelStroke=Instance.new("UIStroke",Label);LabelStroke.Thickness=0;LabelStroke.Color=Vamp.Bloodline.RED_BASE;LabelStroke.Transparency=1
+local Value=Instance.new("TextLabel",Container);Value.BackgroundTransparency=1;Value.Position=UDim2.new(0,90,0,0);Value.Size=UDim2.new(1,-90,1,0);Value.Text="--";Value.TextColor3=Vamp.Bloodline.TXT;Value.TextXAlignment=Enum.TextXAlignment.Right;Value.Font=Enum.Font.GothamBold;Value.TextSize=12;Value.ZIndex=2
+local ValueStroke=Instance.new("UIStroke",Value);ValueStroke.Thickness=0;ValueStroke.Color=Vamp.Bloodline.RED_BASE;ValueStroke.Transparency=1
+local lg=Instance.new("UIGradient",Label);lg.Rotation=90;lg.Color=ColorSequence.new{ColorSequenceKeypoint.new(0,cDark),ColorSequenceKeypoint.new(1,cBase)};lg.Enabled=false
+local vg=Instance.new("UIGradient",Value);vg.Rotation=90;vg.Color=ColorSequence.new{ColorSequenceKeypoint.new(0,cDark),ColorSequenceKeypoint.new(1,cBase)};vg.Enabled=false
+Container.MouseEnter:Connect(function()lg.Enabled=true;vg.Enabled=true;Label.TextColor3=Color3.new(1,1,1);Value.TextColor3=Color3.new(1,1,1);Vamp.Minions.TweenService:Create(LabelStroke,TweenInfo.new(0.2),{Transparency=0}):Play();Vamp.Minions.TweenService:Create(ValueStroke,TweenInfo.new(0.2),{Transparency=0}):Play();LabelStroke.Thickness=0.5;ValueStroke.Thickness=0.5 end);Container.MouseLeave:Connect(function()lg.Enabled=false;vg.Enabled=false;Label.TextColor3=Vamp.Bloodline.DIM;Value.TextColor3=Vamp.Bloodline.TXT;Vamp.Minions.TweenService:Create(LabelStroke,TweenInfo.new(0.2),{Transparency=1}):Play();Vamp.Minions.TweenService:Create(ValueStroke,TweenInfo.new(0.2),{Transparency=1}):Play()end)
+return Value
+end
+Vamp.Visage.Elements.UptimeLabel=CreateStat("UPTIME",0);Vamp.Visage.Elements.FPSLabel=CreateStat("FPS",22);Vamp.Visage.Elements.PingLabel=CreateStat("PING",44);Vamp.Visage.Elements.RoleStatLabel=CreateStat("ROLE",66);Vamp.Visage.Elements.PosLabel=CreateStat("POSITION",88);Vamp.Visage.Elements.FarmedWinsLabel=CreateStat("FARMED WINS",110)
+local ControlsFrame=Instance.new("Frame",MainFrame);ControlsFrame.BackgroundTransparency=1;ControlsFrame.Position=UDim2.new(0,15,0,195);ControlsFrame.Size=UDim2.new(1,-30,0,100);ControlsFrame.ZIndex=2
+Vamp.Visage.ButtonFactory.Create(ControlsFrame,{Name="PowerBtn",Position=UDim2.new(0,0,0,0),Size=UDim2.new(0.48,0,0,40),StateMapper=function()return Vamp.Grimoire.Desires.POWER and"ON"or"OFF",Vamp.Grimoire.Desires.POWER=="ON" and "GREEN" or "RED" end,OnClick=function()
+if Vamp.Grimoire.Trance.InMatch then Vamp.Visage.Notify("[VAMP]", "Wait Until The Match Finishes.") return end
+if Vamp.Grimoire.Trance.InVoting then Vamp.Visage.Notify("[VAMP]", "Just Choose Your Map.") return end
+local current = Vamp.Grimoire.Desires.POWER
+Vamp.Grimoire.Desires.POWER = (current == "ON") and "OFF" or "ON"
+Vamp.Rituals.ScribeDesires();
+if Vamp.Grimoire.Desires.POWER == "ON" then
+Vamp.Rituals.Dissipate(false)
+else
+Vamp.Grimoire.Trance.CurrentAltar=nil;
+Vamp.Grimoire.Trance.LoadingStartTime=0
+if Vamp.Grimoire.Trance.PhysicalAltar then
+Vamp.Rituals.Dissipate(true)
+end
+end;
+Vamp.Visage.Refresh()
+end})
+Vamp.Visage.ButtonFactory.Create(ControlsFrame,{Name="RoleBtn",Position=UDim2.new(0.52,0,0,0),Size=UDim2.new(0.48,0,0,40),StateMapper=function()return Vamp.Grimoire.Desires.ROLE,Vamp.Grimoire.Desires.ROLE=="WINNER" and "BLUE" or "RED" end,OnClick=function()
+Vamp.Grimoire.Desires.ROLE = (Vamp.Grimoire.Desires.ROLE == "WINNER") and "LOSER" or "WINNER"
+Vamp.Rituals.ScribeDesires();
+Vamp.Grimoire.SetupAltars() 
+Vamp.Visage.Refresh()
+end})
+Vamp.Visage.ButtonFactory.Create(ControlsFrame,{Name="PrioBtn",Position=UDim2.new(0,0,0.55,0),Size=UDim2.new(0.48,0,0,40),StateMapper=function()return Vamp.Grimoire.Desires.TIER,Vamp.Grimoire.Desires.TIER=="PRIORITY" and "PURPLE" or "GREY" end,OnClick=function()
+if Vamp.Grimoire.Desires.MODE ~= "2V2" then Vamp.Visage.Notify("[VAMP]", "Enable 2V2 Mode To Use This."); return end
+if Vamp.Grimoire.Desires.ROLE ~= "WINNER" then Vamp.Visage.Notify("[VAMP]", "Switch To The WINNER Role To Use This."); return end
+if Vamp.Grimoire.Desires.TIER == "STANDARD" then Vamp.Grimoire.Desires.TIER="PRIORITY" else Vamp.Grimoire.Desires.TIER="STANDARD" end
+Vamp.Rituals.ScribeDesires()
+Vamp.Grimoire.SetupAltars()
+Vamp.Visage.Refresh()
+end})
+Vamp.Visage.ButtonFactory.Create(ControlsFrame,{Name="ModeBtn",Position=UDim2.new(0.52,0,0.55,0),Size=UDim2.new(0.48,0,0,40),StateMapper=function()return Vamp.Grimoire.Desires.MODE,Vamp.Grimoire.Desires.MODE=="2V2" and "PURPLE" or "RED" end,OnClick=function()
+Vamp.Grimoire.Desires.MODE = (Vamp.Grimoire.Desires.MODE == "1V1") and "2V2" or "1V1"
+Vamp.Grimoire.SetupAltars()
+Vamp.Rituals.ScribeDesires()
+Vamp.Visage.Refresh()
+end})
+local StatusContainer=Instance.new("Frame",MainFrame);StatusContainer.BackgroundColor3=Color3.fromRGB(8,8,10);StatusContainer.Position=UDim2.new(0,15,1,-40);StatusContainer.Size=UDim2.new(1,-30,0,26);StatusContainer.ZIndex=2
+local StatusCorner=Instance.new("UICorner",StatusContainer);StatusCorner.CornerRadius=UDim.new(0,4);local StatusStroke=Instance.new("UIStroke",StatusContainer);StatusStroke.Color=Color3.new(1,1,1);StatusStroke.Thickness=1;local StatusGrad=Instance.new("UIGradient",StatusStroke);StatusGrad.Rotation=90;local cBase,cDark=Vamp.Visage.GetTheme("RED");StatusGrad.Color=ColorSequence.new{ColorSequenceKeypoint.new(0,cDark),ColorSequenceKeypoint.new(1,cBase)};Vamp.Visage.Elements.StatusGrad=StatusGrad
+local StatusDot=Instance.new("Frame",StatusContainer);StatusDot.Position=UDim2.new(0,10,0.5,-3);StatusDot.Size=UDim2.new(0,6,0,6);StatusDot.BackgroundColor3=Color3.new(1,1,1);StatusDot.ZIndex=2;Vamp.Visage.Elements.StatusDot=StatusDot;local DotGrad=Instance.new("UIGradient",StatusDot);DotGrad.Rotation=90;Vamp.Visage.Elements.DotGrad=DotGrad
+local DotCorner=Instance.new("UICorner",StatusDot);DotCorner.CornerRadius=UDim.new(1,0);local StatusText=Instance.new("TextLabel",StatusContainer);StatusText.BackgroundTransparency=1;StatusText.Position=UDim2.new(0,25,0,0);StatusText.Size=UDim2.new(1,-25,1,0);StatusText.Font=Enum.Font.GothamBold;StatusText.TextSize=12;StatusText.TextColor3=Vamp.Bloodline.TXT;StatusText.TextXAlignment=Enum.TextXAlignment.Left;StatusText.Text="OFF";StatusText.ZIndex=2;Vamp.Visage.Elements.StatusText=StatusText
+Vamp.Visage.BeginSnowfall(MainFrame,0.075,2.4,4.8,1);local E=Vamp.Visage.Elements;local dragging,dragStart,startPos
+MainFrame.InputBegan:Connect(function(input)if input.UserInputType==Enum.UserInputType.MouseButton1 then dragging=true;dragStart=input.Position;startPos=MainFrame.Position end end)
+Vamp.Minions.UserInputService.InputChanged:Connect(function(input)if dragging and input.UserInputType==Enum.UserInputType.MouseMovement then local delta=input.Position-dragStart;MainFrame.Position=UDim2.new(startPos.X.Scale,startPos.X.Offset+delta.X,startPos.Y.Scale,startPos.Y.Offset+delta.Y)end end)
+Vamp.Minions.UserInputService.InputEnded:Connect(function(input)if input.UserInputType==Enum.UserInputType.MouseButton1 then dragging=false end end)
+E.InfoButton.MouseButton1Click:Connect(function()Vamp.Visage.SummonInfo("[VAMP] You Need To Be Able To Run Multiple Instances Of Roblox To Use This Script.")end)
+E.CloseButton.MouseButton1Click:Connect(function()Vamp.Visage.SummonPopup("[VAMP] Must You Destroy The Streak Farmer?",function()getgenv().VampActive=false;Vamp.Grimoire.Desires.Active=false;ScreenGui:Destroy();local retreat=(Vamp.Grimoire.Trance.CurrentAltar~=nil);Vamp.Rituals.Dissipate(retreat)end,function()end)end)
+E.MinButton.MouseButton1Click:Connect(function()
+Vamp.Visage.SummonPopup("[VAMP] Must You Hide The Streak Farmer?",function()
+MainFrame.Visible=false;
+Vamp.Visage.Notify("[VAMP]","Press Left Alt To Show Again.")
+end,function()end)
+end)
+Vamp.Minions.UserInputService.InputBegan:Connect(function(input, gpe)
+if not getgenv().VampActive then return end
+if input.KeyCode == Enum.KeyCode.LeftAlt then
+MainFrame.Visible = not MainFrame.Visible
+end
+end)
+end
+function Vamp.Visage.Refresh(override)
+local E=Vamp.Visage.Elements;for _,btnObj in pairs(Vamp.Visage.ButtonFactory.Registry)do btnObj:UpdateState()end
+local status=override or(Vamp.Grimoire.Desires.POWER=="ON" and"SCANNING"or"OFF")
+if Vamp.Grimoire.Trance.LastStatus~=status then Vamp.Grimoire.Trance.LastStatus=status;local key=Vamp.Grimoire.Law.AuraColors[status]or "RED";local cBase,cDark=Vamp.Visage.GetTheme(key);local seq=ColorSequence.new{ColorSequenceKeypoint.new(0,cDark),ColorSequenceKeypoint.new(1,cBase)};if E.DotGrad then E.DotGrad.Color=seq end;if E.StatusGrad then E.StatusGrad.Color=seq end end
+end
+function Vamp.Prophecy.MonitorShutdownKick()
+Vamp.Minions.GuiService.ErrorMessageChanged:Connect(function(errMsg)if not getgenv().VampActive then return end;if errMsg and errMsg:lower():find("shutdown")then task.spawn(Vamp.Rituals.ShutdownRejoin)end end)
+end
+function Vamp.Prophecy.BindEvents()
+local MatchStartEvent=Vamp.Minions.ReplicatedStorage:WaitForChild("Match"):WaitForChild("OnMatchStarted");local MatchFinishEvent=Vamp.Minions.ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("OnMatchFinished");local RoundEndedEvent=Vamp.Minions.ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("OnRoundEnded")
+local function ConnectMapVoting(mapFolder)
+task.spawn(function()
+local votingEvent=mapFolder:FindFirstChild("StartMapVoting")or mapFolder:WaitForChild("StartMapVoting",15)
+if votingEvent and votingEvent:IsA("RemoteEvent")then
+votingEvent.OnClientEvent:Connect(function()if getgenv().VampActive and Vamp.Grimoire.Desires.POWER=="ON" then Vamp.Grimoire.Trance.InVoting=true;Vamp.Grimoire.Trance.CurrentAltar=nil;Vamp.Rituals.Dissipate(false);local hrp=LP.Character and LP.Character:FindFirstChild("HumanoidRootPart");if hrp then hrp.AssemblyLinearVelocity=Vector3.zero;hrp.CFrame=CFrame.new(Vamp.Grimoire.Law.VotingPos)end;Vamp.Visage.Refresh("CHOOSING MAP")end end)
+end
+end)
+end
+local initialMap=Vamp.Minions.ReplicatedStorage:FindFirstChild("Map");if initialMap then ConnectMapVoting(initialMap)end;Vamp.Minions.ReplicatedStorage.ChildAdded:Connect(function(child)if child.Name=="Map"then ConnectMapVoting(child)end end)
+MatchStartEvent.OnClientEvent:Connect(function()
+Vamp.Grimoire.Trance.MatchRemoteActive=true;if not getgenv().VampActive or Vamp.Grimoire.Desires.POWER=="OFF" then return end
+Vamp.Grimoire.Trance.InVoting=false;Vamp.Rituals.Dissipate(false);local hrp=LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+while hrp and math.abs(hrp.Position.Y-Vamp.Grimoire.Law.LobbyY)<Vamp.Grimoire.Law.LobbyLeaveTolerance do if not getgenv().VampActive then return end;task.wait(0.1);hrp=LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")end
+Vamp.Grimoire.Trance.InMatch=true;Vamp.Visage.Refresh("PLAYING")
+Vamp.Rituals.Seppuku()
+Vamp.Rituals.Execute()
+end)
+RoundEndedEvent.OnClientEvent:Connect(function()if not getgenv().VampActive or Vamp.Grimoire.Desires.POWER=="OFF" then return end;if Vamp.Grimoire.Desires.ROLE == "LOSER" then Vamp.Rituals.Ascend()end end)
+MatchFinishEvent.OnClientEvent:Connect(function()
+Vamp.Grimoire.Trance.MatchRemoteActive=false;if not getgenv().VampActive then return end
+Vamp.Grimoire.Trance.InMatch=false;if Vamp.Grimoire.Desires.POWER=="OFF" then return end;if Vamp.Grimoire.Desires.ROLE == "LOSER" then return end
+if Vamp.Grimoire.Desires.ROLE == "WINNER" then Vamp.Grimoire.Desires.FARMEDWINS=Vamp.Grimoire.Desires.FARMEDWINS+1;Vamp.Rituals.ScribeDesires()end
+Vamp.Visage.Refresh("COOLDOWN");Vamp.Rituals.AwaitReturn();if not getgenv().VampActive then return end;Vamp.Grimoire.Trance.CurrentAltar=nil
+if Vamp.Grimoire.Desires.POWER=="ON" then Vamp.Visage.Refresh("SCANNING") else Vamp.Visage.Refresh("OFF") end
+end)
+LP.Idled:Connect(function()if not getgenv().VampActive then return end;Vamp.Minions.VirtualUser:CaptureController();Vamp.Minions.VirtualUser:ClickButton2(Vector2.new())end)
+LP.CharacterAdded:Connect(function(char)char:WaitForChild("HumanoidRootPart");if not Vamp.Grimoire.Law.ScanningPos then task.spawn(function()Vamp.Rituals.InitializeAnchor()end)end end)
+end
+function Vamp.Prophecy.EternalCycle()
+local frameCount=0;local lastTick=tick();local startTime=tick()
+Vamp.Minions.RunService.RenderStepped:Connect(function()
+if not getgenv().VampActive then return end
+frameCount+=1;local now=tick();if now-lastTick>=1 then Vamp.Visage.Elements.FPSLabel.Text=tostring(frameCount);frameCount=0;lastTick=now;local success,ping=pcall(function()return Vamp.Minions.Stats.PerformanceStats.Ping:GetValue()end);Vamp.Visage.Elements.PingLabel.Text=success and math.floor(ping).." ms"or"N/A"end
+Vamp.Visage.Elements.RoleStatLabel.Text=Vamp.Grimoire.Desires.ROLE
+if Vamp.Grimoire.Desires.ROLE == "WINNER" then Vamp.Visage.Elements.FarmedWinsLabel.Text=tostring(Vamp.Grimoire.Desires.FARMEDWINS).." TOTAL WINS"else Vamp.Visage.Elements.FarmedWinsLabel.Text="NOT RELEVANT"end
+local elapsed=now-startTime;Vamp.Visage.Elements.UptimeLabel.Text=string.format("%02d:%02d:%02d",math.floor(elapsed/3600),math.floor((elapsed%3600)/60),math.floor(elapsed%60))
+local hrp=LP.Character and LP.Character:FindFirstChild("HumanoidRootPart");Vamp.Visage.Elements.PosLabel.Text=hrp and string.format("%d, %d, %d",math.floor(hrp.Position.X),math.floor(hrp.Position.Y),math.floor(hrp.Position.Z))or"N/A"
+local s=Vamp.Grimoire.Trance.LastStatus;if s=="LOADING"or s=="CHOOSING MAP"or s=="REJOINING"then local dots=math.floor((now%1.5)*2);Vamp.Visage.Elements.StatusText.Text=s..string.rep(".",dots+1)else Vamp.Visage.Elements.StatusText.Text=s end
+end)
+Vamp.Minions.RunService.PreRender:Connect(function()
+if not getgenv().VampActive or Vamp.Grimoire.Desires.POWER=="OFF" or Vamp.Grimoire.Trance.InMatch or Vamp.Grimoire.Trance.InVoting then return end
+if Vamp.Grimoire.Trance.IsMoving then return end
+local Law=Vamp.Grimoire.Law;local Trance=Vamp.Grimoire.Trance;local Altars=Vamp.Grimoire.Altars
+if not Law.ScanningPos then return end
+local currentAltar=Trance.CurrentAltar;local scanPos=Law.ScanningPos;local char=LP.Character;local hrp=char and char:FindFirstChild("HumanoidRootPart")
+if Trance.CurrentAltar and (hrp.Position - Law.ScanningPos.Position).Magnitude < 5 then
+Vamp.Rituals.ShadowStep(Trance.CurrentAltar)
+return
+end
+if Trance.LastStatus~="COOLDOWN" then
+for _,spot in ipairs(Altars) do
+spot.Occupied.Top=0;spot.Occupied.Bot=0
+spot.Players.Top={};spot.Players.Bot={}
+end
+local radSq = (Vamp.Grimoire.Desires.MODE == "2V2") and Law.SpotRadiusSq2v2 or Law.SpotRadiusSq1v1
+Vamp.Grimoire.Trance.PhysicalAltar = nil
+local currentFramePlayers = {} 
+for _,player in ipairs(Vamp.Minions.Players:GetPlayers())do
+local pHrp=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+if pHrp then 
+local pos=pHrp.Position
+for _,spot in ipairs(Altars)do 
+if (pos.X-spot.X)^2+(pos.Z-spot.Z)^2<=radSq then
+if pos.Y>Law.TopYThreshold then
+spot.Occupied.Top=spot.Occupied.Top+1
+table.insert(spot.Players.Top, player.Name)
+elseif pos.Y<Law.BotYThreshold then
+if player == LP then 
+spot.Occupied.Bot=spot.Occupied.Bot+1
+table.insert(spot.Players.Bot, player.Name)
+Vamp.Grimoire.Trance.PhysicalAltar = spot 
+else
+currentFramePlayers[player] = true
+if not Trance.PlayerStability[player] then Trance.PlayerStability[player] = tick() end
+if tick() - Trance.PlayerStability[player] > Law.OccupancyStabilityTime then
+spot.Occupied.Bot=spot.Occupied.Bot+1
+table.insert(spot.Players.Bot, player.Name)
+end
+end
+end 
+end 
+end 
+end 
+end
+for p, _ in pairs(Trance.PlayerStability) do
+if not currentFramePlayers[p] then Trance.PlayerStability[p] = nil end
+end
+local function GetSpotScore(spot)
+local allowedIndices = Vamp.Grimoire.Desires.ROLE == "WINNER" and {1,3} or {2,4}
+local isAllowed = false
+for _, validIdx in ipairs(allowedIndices) do if spot.Index == validIdx then isAllowed = true break end end
+if not isAllowed then return -100 end
+local isIntruded = (spot.Occupied.Top > 0 or spot.Partner.Occupied.Top > 0)
+if isIntruded then
+if spot == Trance.CurrentAltar then
+if Trance.IntrusionStartTime == 0 then Trance.IntrusionStartTime = tick() end
+if tick() - Trance.IntrusionStartTime > (Law.IntrusionBuffer) then
+return -100 
+end
+else
+return -100 
+end
+else
+if spot == Trance.CurrentAltar then Trance.IntrusionStartTime = 0 end
+end
+local amIPresent = false
+for _, name in ipairs(spot.Players.Bot) do
+if name == LP.Name then amIPresent = true break end
+end
+local myCount = spot.Occupied.Bot - (amIPresent and 1 or 0)
+if myCount < 0 then myCount = 0 end 
+local partnerCount = spot.Partner.Occupied.Bot
+if Vamp.Grimoire.Desires.MODE == "2V2" then
+if Vamp.Grimoire.Desires.ROLE == "WINNER" then
+if Vamp.Grimoire.Desires.TIER == "PRIORITY" then
+if myCount > 0 then return -100 end 
+if partnerCount >= 2 then return 100 
+elseif partnerCount == 1 then return 90 
+elseif partnerCount == 0 then return 80 
+end
+else
+if myCount ~= 1 then return -100 end 
+if partnerCount >= 2 then return 100 
+elseif partnerCount == 1 then return 90 
+elseif partnerCount == 0 then return 80 
+end
+end
+else
+if myCount >= 2 then return -100 end
+if myCount == 1 and partnerCount >= 2 then return 100 
+elseif myCount == 0 and partnerCount >= 2 then return 90 
+elseif myCount == 1 and partnerCount == 1 then return 80 
+elseif myCount == 0 and partnerCount == 1 then return 70 
+elseif myCount == 0 and partnerCount == 0 then return 60 
+else return 50 end
+end
+else
+if Vamp.Grimoire.Desires.ROLE == "WINNER" then
+if myCount > 0 then return -100 end
+if partnerCount >= 1 then return 100 else return 90 end
+else
+if myCount > 0 then return -100 end
+if partnerCount >= 1 then return 100 else return 90 end
+end
+end
+return -100
+end
+local bestSpot = nil
+local bestScore = -100
+local currentScore = -100
+if Trance.CurrentAltar then
+currentScore = GetSpotScore(Trance.CurrentAltar)
+elseif Trance.PhysicalAltar then
+currentScore = GetSpotScore(Trance.PhysicalAltar)
+end
+for _, spot in ipairs(Altars) do
+local score = GetSpotScore(spot)
+if score > bestScore then
+bestScore = score
+bestSpot = spot
+end
+end
+if bestScore == -100 then
+if Trance.CurrentAltar or Trance.PhysicalAltar then
+Vamp.Rituals.Dissipate(true)
+Trance.CurrentAltar = nil
+Trance.IsAtScanningPos = true
+Vamp.Visage.Refresh("SCANNING")
+else
+if not Trance.IsAtScanningPos then
+Vamp.Rituals.Dissipate(true)
+Trance.IsAtScanningPos = true
+Vamp.Visage.Refresh("SCANNING")
+end
+end
+else
+if currentScore == -100 or bestScore > currentScore then
+if bestSpot == Trance.PhysicalAltar then
+Trance.CurrentAltar = bestSpot
+elseif bestSpot ~= Trance.CurrentAltar then
+Vamp.Rituals.ShadowStep(bestSpot)
+end
+end
+local function CheckLoading(spot)
+if not spot then return false end
+local count = spot.Occupied.Bot 
+local pCount = spot.Partner.Occupied.Bot
+if Vamp.Grimoire.Desires.MODE == "2V2" then
+return (count >= 2 and pCount >= 2)
+else
+return (count >= 1 and pCount >= 1)
+end
+end
+if bestSpot == Trance.CurrentAltar and CheckLoading(bestSpot) then
+if Trance.LoadingStartTime == 0 then Trance.LoadingStartTime = tick() end
+Vamp.Visage.Refresh("LOADING")
+Vamp.Grimoire.Trance.TargetNames = {}
+if Vamp.Grimoire.Desires.MODE == "2V2" then
+if Vamp.Grimoire.Desires.ROLE == "WINNER" then
+if Vamp.Grimoire.Desires.TIER == "PRIORITY" then
+Vamp.Grimoire.Trance.TargetNames = bestSpot.Partner.Players.Bot
+end
+else
+if #bestSpot.Partner.Players.Bot > 0 then
+table.insert(Vamp.Grimoire.Trance.TargetNames, bestSpot.Partner.Players.Bot[1])
+end
+end
+else
+if bestSpot.Partner.Players.Bot[1] then
+Vamp.Grimoire.Trance.TargetNames = {bestSpot.Partner.Players.Bot[1]}
+end
+end
+else
+Trance.LoadingStartTime = 0
+Vamp.Visage.Refresh("IDLE")
+end
+end
+end
+if currentAltar and scanPos and hrp and not Trance.InMatch then local dist=(hrp.Position-scanPos).Magnitude;if dist<Law.WatchdogRadius then Vamp.Rituals.ShadowStep(currentAltar);return end end
+end)
+end
+Vamp.Rituals.RecallDesires()
+Vamp.Visage.Manifest()
+Vamp.Visage.Refresh()
+Vamp.Prophecy.BindEvents()
+Vamp.Prophecy.MonitorShutdownKick()
+Vamp.Prophecy.EternalCycle()
+if LP.Character then task.spawn(function()Vamp.Rituals.InitializeAnchor()end)end
+Vamp.Visage.Notify("[VAMP]","Streak Farmer Loaded.")
+local LocalLoaderContent = string.format('loadstring(game:HttpGet("%s"))()', GitHubRaw)
+writefile(LoaderPath, LocalLoaderContent)
