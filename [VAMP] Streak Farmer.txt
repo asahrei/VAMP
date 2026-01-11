@@ -9,6 +9,10 @@ local FolderName = "[VAMP] Files"
 if not isfolder(FolderName) then makefolder(FolderName) end
 local UserUpper = string.upper(LP.Name)
 local LoaderPath = FolderName .. "/[VAMP] Loader - " .. UserUpper .. ".lua"
+local ScriptLogic=[==[
+local Players=game:GetService("Players")
+local LP=Players.LocalPlayer
+if not LP.Character then LP.CharacterAdded:Wait() end
 local Vamp={
 Minions={},
 Bloodline={},
@@ -41,9 +45,9 @@ BG=Color3.fromRGB(8,8,10), TXT=Color3.fromRGB(240,240,240), DIM=Color3.fromRGB(1
 }
 Vamp.Grimoire={
 Law={
-LoaderPath=LoaderPath, 
-Folder=FolderName,
-ConfigFile="[VAMP] Configuration - "..UserUpper..".json",
+FileName="]==]..LoaderPath..[==[", 
+Folder="]==]..FolderName..[==[",
+ConfigFile="[VAMP] Configuration - ]==]..UserUpper..[==[.json",
 ScanningPos=nil,
 VotingPos=Vector3.new(150,-508,-888),
 SeatInitPos=Vector3.new(0,5000,0),
@@ -60,7 +64,6 @@ LobbyReturnProximity=60,
 ReturnTimeout=40,
 TeleportHoverTime=0.1, 
 IntrusionBuffer=0.25, 
-WatchdogRadius=30,
 OccupancyStabilityTime=0.5,
 AuraColors={OFF="RED",SCANNING="GREEN",IDLE="BLUE",LOADING="PURPLE",PLAYING="PURPLE",COOLDOWN="GREY",CHOOSING_MAP="ORANGE",REJOINING="PURPLE"}
 },
@@ -299,6 +302,7 @@ if hrp and hum then
 local dist = (hrp.Position - Vamp.Grimoire.Law.LobbyCenter).Magnitude
 if dist <= Vamp.Grimoire.Law.LobbyReturnProximity and hum.FloorMaterial~=Enum.Material.Air then 
 Vamp.Grimoire.Law.ScanningPos = hrp.CFrame
+task.wait(2)
 break 
 end 
 end
@@ -775,7 +779,6 @@ Vamp.Visage.Refresh("IDLE")
 end
 end
 end
-if currentAltar and scanPos and hrp and not Trance.InMatch then local dist=(hrp.Position-scanPos).Magnitude;if dist<Law.WatchdogRadius then Vamp.Rituals.ShadowStep(currentAltar);return end end
 end)
 end
 Vamp.Rituals.RecallDesires()
